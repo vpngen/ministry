@@ -143,6 +143,7 @@ func main() {
 	switch chunked {
 	case true:
 		w = httputil.NewChunkedWriter(os.Stdout)
+		defer w.Close()
 	default:
 		w = os.Stdout
 	}

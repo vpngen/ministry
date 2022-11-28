@@ -229,6 +229,8 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
+                fmt.Fprintf(os.Stderr, "Data:\n%s\n", wgconfx)
+
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
 

@@ -135,7 +135,7 @@ func main() {
 	}
 
 	// wgconfx = wgconf + keydesk IP
-	wgconfx, err := requestBrigade(db, schema, sshconf, id)
+	wgconfx, fullname, person, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
 	if err != nil {
 		log.Fatalf("Can't request brigade: %s\n", err)
 	}
@@ -148,6 +148,22 @@ func main() {
 		w = os.Stdout
 	}
 
+	_, err = fmt.Fprintln(w, fullname)
+	if err != nil {
+		log.Fatalf("Can't print fullname: %s\n", err)
+	}
+	_, err = fmt.Fprintln(w, person)
+	if err != nil {
+		log.Fatalf("Can't print person: %s\n", err)
+	}
+	_, err = fmt.Fprintln(w, desc64)
+	if err != nil {
+		log.Fatalf("Can't print desc: %s\n", err)
+	}
+	_, err = fmt.Fprintln(w, url64)
+	if err != nil {
+		log.Fatalf("Can't print url: %s\n", err)
+	}
 	_, err = fmt.Fprintln(w, mnemo)
 	if err != nil {
 		log.Fatalf("Can't print memo: %s\n", err)
@@ -159,12 +175,12 @@ func main() {
 	}
 }
 
-func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, error) {
+func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, string, string, string, string, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
 	}
 
 	var (
@@ -187,33 +203,38 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return nil, fmt.Errorf("brigade query: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("brigade query: %w", err)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("commit: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
 	}
+
+	fullname64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname))
+	person64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Name))
+	desc64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc))
+	url64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL))
 
 	cmd := fmt.Sprintf("-ch -id %s -name %s -person %s -desc %s -url %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
-		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname)),
-		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Name)),
-		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc)),
-		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL)),
+		fullname64,
+		person64,
+		desc64,
+		url64,
 	)
 
 	fmt.Fprintf(os.Stderr, "%s#%s:22 -> %s\n", sshkeyRemoteUsername, control_ip, cmd)
 
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", control_ip), sshconf)
 	if err != nil {
-		return nil, fmt.Errorf("ssh dial: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("ssh dial: %w", err)
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("ssh session: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("ssh session: %w", err)
 	}
 	defer session.Close()
 
@@ -225,17 +246,17 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	if err := session.Run(cmd); err != nil {
 		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
 
-		return nil, fmt.Errorf("ssh run: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
 	}
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "readed data:\n%s\n", wgconfx)
 
-		return nil, fmt.Errorf("chunk read: %w", err)
+		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
 	}
 
-	return wgconfx, nil
+	return wgconfx, fullname, person.Name, desc64, url64, nil
 }
 
 func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {

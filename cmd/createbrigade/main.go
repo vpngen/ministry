@@ -408,7 +408,8 @@ func parseArgs() (bool, []byte, error) {
 		return false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
 	}
 
-	token, err := base64.StdEncoding.WithPadding(base64.NoPadding).DecodeString(a[0])
+	token := make([]byte, base64.StdEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
+	_, err := base64.StdEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
 		return false, nil, fmt.Errorf("access token: %w", err)
 	}

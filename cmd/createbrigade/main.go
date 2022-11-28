@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base32"
 	"encoding/base64"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -97,12 +99,19 @@ const (
 
 const seedPrefix = "даблять"
 
+var errEmptyAccessToken = errors.New("token not specified")
+
 func main() {
 	var w io.WriteCloser
 
 	confDir := os.Getenv("CONFDIR")
 	if confDir == "" {
 		confDir = etcDefaultPath
+	}
+
+	chunked, _, err := parseArgs()
+	if err != nil {
+		log.Fatalf("Can't parse args: %s\n", err)
 	}
 
 	dbname, schema, err := readConfigs(confDir)
@@ -131,7 +140,12 @@ func main() {
 		log.Fatalf("Can't request brigade: %s\n", err)
 	}
 
-	w = httputil.NewChunkedWriter(os.Stdout)
+	switch chunked {
+	case true:
+		w = httputil.NewChunkedWriter(os.Stdout)
+	default:
+		w = os.Stdout
+	}
 
 	_, err = fmt.Fprintln(w, mnemo)
 	if err != nil {
@@ -180,7 +194,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
-	cmd := fmt.Sprintf("-id %s -name %s -person %s -desc %s -url %s",
+	cmd := fmt.Sprintf("-ch -id %s -name %s -person %s -desc %s -url %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(id)),
 		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname)),
 		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Name)),
@@ -293,12 +307,6 @@ func createBrigade(db *pgxpool.Pool, schema string) (string, string, error) {
 	return id, mnemo, nil
 }
 
-/*brigadierID := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:])
-brigadierName := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname))
-personName := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Name))
-personDesc := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc))
-personURL := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL))*/
-
 func createDBPool(dbname string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(fmt.Sprintf("host=%s dbname=%s", postgresqlSocket, dbname))
 	if err != nil {
@@ -361,4 +369,22 @@ func createSSHConfig(path string) (*ssh.ClientConfig, error) {
 	}
 
 	return config, nil
+}
+
+func parseArgs() (bool, []byte, error) {
+	chunked := flag.Bool("ch", false, "chunked output")
+
+	flag.Parse()
+
+	a := flag.Args()
+	if len(a) < 1 {
+		return false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
+	}
+
+	token, err := base64.StdEncoding.WithPadding(base64.NoPadding).DecodeString(a[0])
+	if err != nil {
+		return false, nil, fmt.Errorf("access token: %w", err)
+	}
+
+	return *chunked, token, nil
 }

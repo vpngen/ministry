@@ -39,7 +39,7 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON :"schema_name".realms TO :"realms_dbuser";
 GRANT SELECT ON ALL TABLES IN SCHEMA :"schema_name" TO :"realms_dbuser";
 GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA :"schema_name"  TO :"realms_dbuser";
 
-CREATE ROLE :"brigadiers_dbuser" WITH LOGIN;
+--CREATE ROLE :"brigadiers_dbuser" WITH LOGIN;
 GRANT USAGE ON SCHEMA :"schema_name" TO :"brigadiers_dbuser";
 GRANT SELECT ON :"schema_name".realms TO :"brigadiers_dbuser";
 GRANT SELECT,UPDATE,INSERT,DELETE ON :"schema_name".brigadiers, :"schema_name".brigadier_salts, :"schema_name".brigadier_keys TO :"brigadiers_dbuser";

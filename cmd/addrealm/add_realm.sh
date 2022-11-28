@@ -11,8 +11,6 @@ echo "schema: $SCHEMA"
 
 realm_id="$1"
 control_ip="$2"
-shift; shift
-
 
 if [ "x" = "x${realm_id}" -o "x" = "x${control_ip}" ]; then
     echo "Usage: $0 <realm_id> <control_ip>"

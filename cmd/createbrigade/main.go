@@ -158,7 +158,7 @@ func main() {
 	}
 }
 
-func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id string) ([]byte, error) {
+func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -177,7 +177,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 			(pgx.Identifier{schema, "brigadiers"}.Sanitize()),
 			(pgx.Identifier{schema, "realms"}.Sanitize()),
 		),
-		id,
+		id.String(),
 	).Scan(
 		&fullname,
 		&person,
@@ -195,7 +195,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	}
 
 	cmd := fmt.Sprintf("-ch -id %s -name %s -person %s -desc %s -url %s",
-		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(id)),
+		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname)),
 		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Name)),
 		base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc)),
@@ -235,24 +235,24 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	return wgconfx, nil
 }
 
-func createBrigade(db *pgxpool.Pool, schema string) (string, string, error) {
-	id := uuid.New().String()
+func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
+	id := uuid.New()
 
 	fullname, person, err := namesgenerator.PhysicsAwardee()
 	if err != nil {
-		return "", "", fmt.Errorf("physics generate: %s", err)
+		return id, "", fmt.Errorf("physics generate: %s", err)
 	}
 
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT128, seedPrefix)
 	if err != nil {
-		return "", "", fmt.Errorf("gen seed12: %w", err)
+		return id, "", fmt.Errorf("gen seed12: %w", err)
 	}
 
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("begin: %w", err)
+		return id, "", fmt.Errorf("begin: %w", err)
 	}
 
 	var (
@@ -264,7 +264,7 @@ func createBrigade(db *pgxpool.Pool, schema string) (string, string, error) {
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return "", "", fmt.Errorf("pair query: %w", err)
+		return id, "", fmt.Errorf("pair query: %w", err)
 	}
 
 	_, err = tx.Exec(ctx,
@@ -277,7 +277,7 @@ func createBrigade(db *pgxpool.Pool, schema string) (string, string, error) {
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return "", "", fmt.Errorf("create brigadier: %w", err)
+		return id, "", fmt.Errorf("create brigadier: %w", err)
 	}
 
 	_, err = tx.Exec(ctx,
@@ -288,7 +288,7 @@ func createBrigade(db *pgxpool.Pool, schema string) (string, string, error) {
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return "", "", fmt.Errorf("create brigadier salt: %w", err)
+		return id, "", fmt.Errorf("create brigadier salt: %w", err)
 	}
 
 	_, err = tx.Exec(ctx,
@@ -299,12 +299,12 @@ func createBrigade(db *pgxpool.Pool, schema string) (string, string, error) {
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return "", "", fmt.Errorf("create brigadier key: %w", err)
+		return id, "", fmt.Errorf("create brigadier key: %w", err)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("commit: %w", err)
+		return id, "", fmt.Errorf("commit: %w", err)
 	}
 
 	return id, mnemo, nil

@@ -216,7 +216,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	desc64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc))
 	url64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL))
 
-	cmd := fmt.Sprintf("-ch -id %s -name %s -person %s -desc %s -url %s",
+	cmd := fmt.Sprintf("addbrigade -ch -id %s -name %s -person %s -desc %s -url %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 		fullname64,
 		person64,

@@ -262,7 +262,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 	id := uuid.New()
 
-	fullname, person, err := namesgenerator.PhysicsAwardee()
+	fullname, person, err := namesgenerator.PhysicsAwardeeShort()
 	if err != nil {
 		return id, "", fmt.Errorf("physics generate: %s", err)
 	}

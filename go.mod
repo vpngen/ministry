@@ -6,8 +6,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v5 v5.1.1
-	github.com/vpngen/wordsgens v0.0.0-20221023201324-185e9e3d78c7
-	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
+	github.com/vpngen/wordsgens v0.0.0-20221207004108-93481a4776f9
+	golang.org/x/crypto v0.3.0
 )
 
 require (
@@ -22,6 +22,6 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/sync v0.0.0-20220923202941-7f9b1623fab7 // indirect
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
-	golang.org/x/text v0.3.8 // indirect
+	golang.org/x/sys v0.3.0 // indirect
+	golang.org/x/text v0.4.0 // indirect
 )

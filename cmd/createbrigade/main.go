@@ -269,7 +269,7 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedPrefix)
 	if err != nil {
-		return id, "", fmt.Errorf("gen seed12: %w", err)
+		return id, "", fmt.Errorf("gen seed6: %w", err)
 	}
 
 	ctx := context.Background()

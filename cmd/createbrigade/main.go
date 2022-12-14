@@ -97,9 +97,18 @@ const (
 	`
 )
 
-const seedPrefix = "даблять"
+const defaultSeedExtra = "даблять"
 
 var errEmptyAccessToken = errors.New("token not specified")
+
+var seedExtra string // extra data for seed
+
+func init() {
+	seedExtra = os.Getenv("SEED_EXTRA")
+	if seedExtra == "" {
+		seedExtra = defaultSeedExtra
+	}
+}
 
 func main() {
 	var w io.WriteCloser
@@ -267,7 +276,7 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 		return id, "", fmt.Errorf("physics generate: %s", err)
 	}
 
-	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedPrefix)
+	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
 	if err != nil {
 		return id, "", fmt.Errorf("gen seed6: %w", err)
 	}

@@ -12,6 +12,7 @@ CREATE TABLE :"schema_name".realms (
 CREATE TABLE :"schema_name".brigadiers (
     brigade_id          uuid PRIMARY KEY NOT NULL,
     realm_id            uuid NOT NULL,
+    create_at           timestamp without time zone NOT NULL DEFAULT NOW(),
     brigadier           text UNIQUE NOT NULL,
     person              json NOT NULL,
     FOREIGN KEY (realm_id) REFERENCES :"schema_name".realms (realm_id)
@@ -31,6 +32,12 @@ CREATE TABLE :"schema_name".brigadiers_queue (
     queue_id serial PRIMARY KEY,
     payload json NOT NULL,
     error json
+);
+
+CREATE TABLE :"schema_name".deleted_brigadiers (
+    brigade_id          uuid UNIQUE NOT NULL REFERENCES :"schema_name".brigadiers (brigade_id),
+    deleted_at timestamp without time zone DEFAULT now(),
+    reason text NOT NULL
 );
 
 CREATE ROLE :"realms_dbuser" WITH LOGIN;

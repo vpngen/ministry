@@ -39,6 +39,8 @@ const (
 
 const sshTimeOut = time.Duration(5 * time.Second)
 
+const maxCollisionAttemts = 1000
+
 const (
 	sqlPickRealm = `
 	SELECT realm_id, control_ip FROM %s LIMIT 1
@@ -271,11 +273,6 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 	id := uuid.New()
 
-	fullname, person, err := namesgenerator.PhysicsAwardeeShort()
-	if err != nil {
-		return id, "", fmt.Errorf("physics generate: %s", err)
-	}
-
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
 	if err != nil {
 		return id, "", fmt.Errorf("gen seed6: %w", err)
@@ -300,17 +297,43 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 		return id, "", fmt.Errorf("pair query: %w", err)
 	}
 
-	_, err = tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateBrigadier, (pgx.Identifier{schema, "brigadiers"}.Sanitize())),
-		id,
-		realm_id,
-		fullname,
-		person,
-	)
-	if err != nil {
-		tx.Rollback(ctx)
+	bcnt := 0
+	for {
+		fullname, person, err := namesgenerator.PhysicsAwardeeShort()
+		if err != nil {
+			return id, "", fmt.Errorf("physics generate: %s", err)
+		}
 
-		return id, "", fmt.Errorf("create brigadier: %w", err)
+		_, err = tx.Exec(ctx,
+			fmt.Sprintf(sqlCreateBrigadier, (pgx.Identifier{schema, "brigadiers"}.Sanitize())),
+			id,
+			realm_id,
+			fullname,
+			person,
+		)
+		if err != nil {
+			if bcnt++; bcnt > maxCollisionAttemts {
+				tx.Rollback(ctx)
+
+				return id, "", fmt.Errorf("create brigadier: %w", err)
+			}
+
+			if pgerr, ok := err.(pgx.PgError); ok {
+				switch pgerr.ConstraintName {
+				case "brigadiers_brigade_id_key":
+					id = uuid.New()
+					continue
+				case "brigadiers_brigadier_key":
+					continue
+				}
+			}
+
+			tx.Rollback(ctx)
+
+			return id, "", fmt.Errorf("create brigadier: %w", err)
+		}
+
+		break
 	}
 
 	_, err = tx.Exec(ctx,

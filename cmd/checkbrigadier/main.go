@@ -248,7 +248,7 @@ func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (bool, uuid.UUI
 	sqlSaltByName := `SELECT
 		brigadiers.brigade_id,
 		brigadiers.brigadier,
-		delete_at,
+		deleted_at,
 		reason
 	FROM %s, %s
 	LEFT JOIN %s ON 

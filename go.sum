@@ -30,8 +30,6 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.8.0 h1:pSgiaMZlXftHpm5L7V1+rVB+AZJydKsMxsQBIJw4PKk=
-github.com/vpngen/wordsgens v0.0.0-20221214110310-88297468b48c h1:bgaPtSIgbFUH7eV7u2V/jXKdcmA81AtqyDeQEiWAd6A=
-github.com/vpngen/wordsgens v0.0.0-20221214110310-88297468b48c/go.mod h1:6FqPSTVeFvPqpW6wWPG+NvnmX5fWPZX+9ljbStmkh2I=
 github.com/vpngen/wordsgens v0.0.0-20221214131824-ff06c1f70d47 h1:Nvva5hIH8befgsAqzHH2BNt5oxUNQLkt2GeZ+nea4gE=
 github.com/vpngen/wordsgens v0.0.0-20221214131824-ff06c1f70d47/go.mod h1:a0bOlYvHNyJRUHpYntAdOAt4FoDy2H1fdHZGigQSLdI=
 go.uber.org/atomic v1.10.0 h1:9qC72Qh0+3MqyJbAn8YU5xVq1frD8bn3JtD2oXtafVQ=

@@ -3,6 +3,7 @@ module github.com/vpngen/ministry
 go 1.19
 
 require (
+	github.com/gofrs/uuid v4.3.1+incompatible
 	github.com/google/uuid v1.3.0
 	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v5 v5.1.1
@@ -12,7 +13,6 @@ require (
 
 require (
 	github.com/cockroachdb/apd v1.1.0 // indirect
-	github.com/gofrs/uuid v4.3.1+incompatible // indirect
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect

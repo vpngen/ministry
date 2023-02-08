@@ -138,7 +138,7 @@ func main() {
 
 	wgconf, err := blessBrigade(db, schema, sshconf, id)
 	if err != nil {
-		log.Fatalln("Can't bless brigade")
+		log.Fatalf("Can't bless brigade: %s", err)
 	}
 
 	log.Println("WGCONFIG:")

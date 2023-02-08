@@ -226,6 +226,19 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
 
+	sqlRemoveDeleted := `DELETE FROM %s WHERE brigade_id=$1`
+	_, err = tx.Exec(ctx,
+		fmt.Sprintf(sqlRemoveDeleted,
+			(pgx.Identifier{schema, "deleted_brigadiers"}.Sanitize()),
+		),
+		id,
+	)
+	if err != nil {
+		tx.Rollback(ctx)
+
+		return nil, fmt.Errorf("delete deleted: %w", err)
+	}
+
 	return wgconfx, nil
 }
 

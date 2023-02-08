@@ -17,7 +17,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
@@ -311,29 +312,30 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 			fullname,
 			person,
 		)
-		if err != nil {
-			if bcnt++; bcnt > maxCollisionAttemts {
+		if err == nil {
+			break
+		}
+
+		if bcnt++; bcnt > maxCollisionAttemts {
+			tx.Rollback(ctx)
+
+			return id, "", fmt.Errorf("create brigadier: %w: attempts: %d", err, bcnt)
+		}
+
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.ConstraintName {
+			case "brigadiers_brigade_id_key":
+				id = uuid.New()
+				continue
+			case "brigadiers_brigadier_key":
+				continue
+			default:
 				tx.Rollback(ctx)
 
 				return id, "", fmt.Errorf("create brigadier: %w", err)
 			}
-
-			if pgerr, ok := err.(pgx.PgError); ok {
-				switch pgerr.ConstraintName {
-				case "brigadiers_brigade_id_key":
-					id = uuid.New()
-					continue
-				case "brigadiers_brigadier_key":
-					continue
-				}
-			}
-
-			tx.Rollback(ctx)
-
-			return id, "", fmt.Errorf("create brigadier: %w", err)
 		}
-
-		break
 	}
 
 	_, err = tx.Exec(ctx,

@@ -244,6 +244,11 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("delete deleted: %w", err)
 	}
 
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
 	return wgconfx, nil
 }
 

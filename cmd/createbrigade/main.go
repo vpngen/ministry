@@ -302,19 +302,38 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 	for {
 		fullname, person, err := namesgenerator.PhysicsAwardeeShort()
 		if err != nil {
+			tx.Rollback(ctx)
+
 			return id, "", fmt.Errorf("physics generate: %s", err)
 		}
 
-		_, err = tx.Exec(ctx,
+		ntx, err := tx.Begin(ctx)
+		if err != nil {
+			tx.Rollback(ctx)
+
+			return id, "", fmt.Errorf("begin: %w", err)
+		}
+
+		_, err = ntx.Exec(ctx,
 			fmt.Sprintf(sqlCreateBrigadier, (pgx.Identifier{schema, "brigadiers"}.Sanitize())),
 			id,
 			realm_id,
 			fullname,
 			person,
 		)
+
 		if err == nil {
+			err := ntx.Commit(ctx)
+			if err != nil {
+				tx.Rollback(ctx)
+
+				return id, "", fmt.Errorf("nested commit: %w", err)
+			}
+
 			break
 		}
+
+		ntx.Rollback(ctx)
 
 		if bcnt++; bcnt > maxCollisionAttemts {
 			tx.Rollback(ctx)
@@ -333,7 +352,7 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 			default:
 				tx.Rollback(ctx)
 
-				return id, "", fmt.Errorf("create brigadier: %w", err)
+				return id, "", fmt.Errorf("create brigadier: %w", pgErr)
 			}
 		}
 	}

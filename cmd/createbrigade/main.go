@@ -17,7 +17,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
@@ -38,6 +39,8 @@ const (
 )
 
 const sshTimeOut = time.Duration(5 * time.Second)
+
+const maxCollisionAttemts = 1000
 
 const (
 	sqlPickRealm = `
@@ -271,11 +274,6 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 	id := uuid.New()
 
-	fullname, person, err := namesgenerator.PhysicsAwardeeShort()
-	if err != nil {
-		return id, "", fmt.Errorf("physics generate: %s", err)
-	}
-
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
 	if err != nil {
 		return id, "", fmt.Errorf("gen seed6: %w", err)
@@ -300,17 +298,63 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 		return id, "", fmt.Errorf("pair query: %w", err)
 	}
 
-	_, err = tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateBrigadier, (pgx.Identifier{schema, "brigadiers"}.Sanitize())),
-		id,
-		realm_id,
-		fullname,
-		person,
-	)
-	if err != nil {
-		tx.Rollback(ctx)
+	bcnt := 0
+	for {
+		fullname, person, err := namesgenerator.PhysicsAwardeeShort()
+		if err != nil {
+			tx.Rollback(ctx)
 
-		return id, "", fmt.Errorf("create brigadier: %w", err)
+			return id, "", fmt.Errorf("physics generate: %s", err)
+		}
+
+		ntx, err := tx.Begin(ctx)
+		if err != nil {
+			tx.Rollback(ctx)
+
+			return id, "", fmt.Errorf("begin: %w", err)
+		}
+
+		_, err = ntx.Exec(ctx,
+			fmt.Sprintf(sqlCreateBrigadier, (pgx.Identifier{schema, "brigadiers"}.Sanitize())),
+			id,
+			realm_id,
+			fullname,
+			person,
+		)
+
+		if err == nil {
+			err := ntx.Commit(ctx)
+			if err != nil {
+				tx.Rollback(ctx)
+
+				return id, "", fmt.Errorf("nested commit: %w", err)
+			}
+
+			break
+		}
+
+		ntx.Rollback(ctx)
+
+		if bcnt++; bcnt > maxCollisionAttemts {
+			tx.Rollback(ctx)
+
+			return id, "", fmt.Errorf("create brigadier: %w: attempts: %d", err, bcnt)
+		}
+
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.ConstraintName {
+			case "brigadiers_brigade_id_key":
+				id = uuid.New()
+				continue
+			case "brigadiers_brigadier_key":
+				continue
+			default:
+				tx.Rollback(ctx)
+
+				return id, "", fmt.Errorf("create brigadier: %w", pgErr)
+			}
+		}
 	}
 
 	_, err = tx.Exec(ctx,

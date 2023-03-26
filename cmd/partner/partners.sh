@@ -2,13 +2,14 @@
 
 set -e
 
+# !!! partner deletion is not implemented yet and subject to discussion
+
 printdef () {
         echo "Usage: $0 [options] command [command args and options]"
         echo "Options:"
         echo "    -h     Print this help message"       
         echo "Commands:"
         echo "    add  <partner_id> <description>       # Add a partner"
-        echo "    del  <partner_id>                     # Delete a partner"
         echo "    info <partner_id>                     # Show partner info"
         echo "    list                                  # List all partners" 
         echo "    activate <partner_id>                 # Activate a partner"
@@ -33,21 +34,8 @@ BEGIN;
 INSERT INTO :"schema_name".partners (partner_id,partner,is_active) VALUES (:'partner_id', :'desc', false);
 COMMIT;
 EOF
-}
 
-delpartner () {
-        partner_id="$1"
-        if [ "x" = "x${partner_id}" ]; then
-                printdef
-        fi
-
-        ON_ERROR_STOP=yes psql -v -a -d "${DBNAME}" \
-    --set schema_name="${SCHEMA}" \
-    --set partner_id="${partner_id}" <<EOF
-BEGIN;
-        DELETE FROM :"schema_name".partners WHERE partner_id=:'partner_id';
-COMMIT;
-EOF
+        echo "Partner ${partner_id} added."
 }
 
 listpartners () {
@@ -89,6 +77,8 @@ BEGIN;
         UPDATE :"schema_name".partners SET is_active=true WHERE partner_id=:'partner_id';
 COMMIT;
 EOF
+
+        echo "Partner ${partner_id} activated."
 }
 
 deactivate () {
@@ -104,6 +94,8 @@ BEGIN;
         UPDATE :"schema_name".partners SET is_active=false WHERE partner_id=:'partner_id';
 COMMIT;
 EOF
+
+        echo "Partner ${partner_id} deactivated."
 }
 
 attachdc () {

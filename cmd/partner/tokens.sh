@@ -34,6 +34,7 @@ BEGIN;
 COMMIT;
 EOF
 
+        echo "Added token ${token} for partner ${partner_id}"
 }
 
 delkey () {
@@ -59,6 +60,7 @@ BEGIN;
 COMMIT;
 EOF
 
+        echo "Deleted token ${token} for partner ${partner_id}"
 }
 
 CONFDIR=${CONFDIR:-"/etc/vgdept"}
@@ -81,7 +83,7 @@ opt="$1";
 shift
 
 case "$opt" in
-        -h, --help)
+        -h,--help)
                 printdef
                 ;;
         addkey)

@@ -2,6 +2,8 @@
 
 set -e
 
+# !!! realm deletion is not implemented yet and subject to discussion
+
 printdef () {
         echo "Usage: $0 [options] command [command args and options]"
         echo "Options:"

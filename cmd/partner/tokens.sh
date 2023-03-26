@@ -8,29 +8,29 @@ printdef () {
         echo "    -h     Print this help message"       
         echo "Commands:"
         echo "    addkey <partner_id>           # Add a partner key"
-        echo "    delkey <partner_id> <key>     # Delete a partner key"
+        echo "    delkey <partner_id> <token>   # Delete a partner token"
         exit 1
 }
 
 addkey () {
         partner_id="$1"
-        key="$2"
-        if [ "x" = "x${partner_id}" -o "x" = "x${key}" ]; then
+        token="$2"
+        if [ "x" = "x${partner_id}" -o "x" = "x${token}" ]; then
                 printdef
         fi
 
         # token='\x'$(echo "${key}" | base64 --decode | hexdump -ve '1/1 "%02x"')
 
-        ON_ERROR_STOP=yes psql -v -a -d ${DBNAME} \
-    --set schema_name=${SCHEMA} \
-    --set partner_id=${partner_id} \
-    --set key=${key} <<EOF
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" \
+    --set token="${token}" <<EOF
 BEGIN;
         INSERT INTO 
-                :"schema_name".partners_keys 
-                (partner_id, key) 
+                :"schema_name".partners_tokens 
+                (partner_id, token) 
         VALUES 
-                (:'partner_id', decode(:'key', 'base64'));
+                (:'partner_id', decode(:'token', 'base64'));
 COMMIT;
 EOF
 
@@ -38,26 +38,24 @@ EOF
 
 delkey () {
         partner_id="$1"
-        key="$2"
+        token="$2"
 
-        if [ "x" = "x${partner_id}" -o "x" = "x${key}" ]; then
+        if [ "x" = "x${partner_id}" -o "x" = "x${token}" ]; then
                 printdef
         fi
 
         # token='\x'$(echo "${key}" | base64 --decode | hexdump -ve '1/1 "%02x"')
 
-        ON_ERROR_STOP=yes psql -v -a -d ${DBNAME} \
-    --set schema_name=${SCHEMA} \
-    --set partner_id=${partner_id} \
-    --set key=${key} <<EOF
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" \
+    --set token="${token}" <<EOF
 BEGIN;
-
         DELETE FROM 
-                :"schema_name".partners_keys 
+                :"schema_name".partners_tokens 
         WHERE 
                 partner_id=:'partner_id' 
-                AND key=decode(:'key', 'base64');
-
+                AND token=decode(:'token', 'base64');
 COMMIT;
 EOF
 

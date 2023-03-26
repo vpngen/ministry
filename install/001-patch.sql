@@ -11,21 +11,27 @@ CREATE TABLE :"schema_name".partners (
     is_active           bool NOT NULL
 );
 
-CREATE TABLE :"schema_name".partner_tokens (
+CREATE TABLE :"schema_name".partners_tokens (
     partner_id          uuid NOT NULL REFERENCES :"schema_name".partners (partner_id),
     token               partner_token NOT NULL,
-    created_at          timestamp without time zone DEFAULT now(),
+    created_at          timestamp without time zone DEFAULT now()
+);
+
+
+CREATE TABLE :"schema_name".partners_realms (
+    partner_id          uuid NOT NULL REFERENCES :"schema_name".partners (partner_id),
+    realm_id            uuid NOT NULL REFERENCES :"schema_name".realms (realm_id)
 );
 
 -- Grants.
 
 --CREATE ROLE :"partnerss_dbuser" WITH LOGIN;
 GRANT USAGE ON SCHEMA :"schema_name" TO :"partners_dbuser";
-GRANT SELECT,INSERT,UPDATE,DELETE ON :"schema_name".realms TO :"partners_dbuser";
+GRANT SELECT,INSERT,UPDATE,DELETE ON :"schema_name".partners, :"schema_name".partners_tokens, :"schema_name".partners_realms TO :"partners_dbuser";
 GRANT SELECT ON ALL TABLES IN SCHEMA :"schema_name" TO :"partners_dbuser";
 GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA :"schema_name"  TO :"partners_dbuser";
 
 GRANT SELECT ON :"schema_name".partners TO :"brigadiers_dbuser";
-GRANT SELECT ON :"schema_name".partners_keys TO :"brigadiers_dbuser";
+GRANT SELECT ON :"schema_name".partners_tokens TO :"brigadiers_dbuser";
 
 COMMIT;

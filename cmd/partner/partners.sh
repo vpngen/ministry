@@ -7,10 +7,14 @@ printdef () {
         echo "Options:"
         echo "    -h     Print this help message"       
         echo "Commands:"
-        echo "    add  <partner_id> <description>       # Add a partner key"
-        echo "    del  <partner_id>                     # Delete a partner key"
+        echo "    add  <partner_id> <description>       # Add a partner"
+        echo "    del  <partner_id>                     # Delete a partner"
         echo "    info <partner_id>                     # Show partner info"
-        echo "    list                                  # List all partners"
+        echo "    list                                  # List all partners" 
+        echo "    activate <partner_id>                 # Activate a partner"
+        echo "    deactivate <partner_id>               # Deactivate a partner"
+        echo "    attachdc <partner_id> <realm_id>      # Attach a partner to a realm"
+        echo "    detachdc <partner_id> <realm_id>      # Detach a partner from a realm"
         exit 1
 }
 
@@ -21,12 +25,12 @@ addpartner () {
                 printdef
         fi
 
-        ON_ERROR_STOP=yes psql -v -a -d ${DBNAME} \
-    --set schema_name=${SCHEMA} \
-    --set partner_id=${partner_id} \
-    --set desc=${partner_desc} <<EOF
+        ON_ERROR_STOP=yes psql -v -a -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" \
+    --set desc="${partner_desc}" <<EOF
 BEGIN;
-INSERT INTO :"schema_name".partners (partner_id,partner,is_active) VALUES (:'partner_id', :'desc', true);
+INSERT INTO :"schema_name".partners (partner_id,partner,is_active) VALUES (:'partner_id', :'desc', false);
 COMMIT;
 EOF
 }
@@ -37,9 +41,9 @@ delpartner () {
                 printdef
         fi
 
-        ON_ERROR_STOP=yes psql -v -a -d ${DBNAME} \
-    --set schema_name=${SCHEMA} \
-    --set partner_id=${partner_id} <<EOF
+        ON_ERROR_STOP=yes psql -v -a -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" <<EOF
 BEGIN;
         DELETE FROM :"schema_name".partners WHERE partner_id=:'partner_id';
 COMMIT;
@@ -47,8 +51,8 @@ EOF
 }
 
 listpartners () {
-        ON_ERROR_STOP=yes psql -v -a -d ${DBNAME} \
-    --set schema_name=${SCHEMA} <<EOF
+        ON_ERROR_STOP=yes psql -v -a -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
         SELECT * FROM :"schema_name".partners;
 COMMIT;
@@ -61,12 +65,77 @@ infopartner () {
                 printdef
         fi
 
-        ON_ERROR_STOP=yes psql -v -a -d ${DBNAME} \
-    --set schema_name=${SCHEMA} \
-    --set partner_id=${partner_id} <<EOF
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" <<EOF
 BEGIN;
-        SELECT * FROM :"schema_name".partners WHERE partner_id=:'partner_id';
-        SELECT CONCAT('    ',ecncode(key, 'base64') FROM :"schema_name".partners_keys WHERE partner_id=:'partner_id';
+        SELECT 'Partner :' AS head, * FROM :"schema_name".partners WHERE partner_id=:'partner_id';
+        SELECT CONCAT('    key: ',encode(token, 'base64')) FROM :"schema_name".partners_tokens WHERE partner_id=:'partner_id';
+        SELECT CONCAT('    realm: ',realm_id) FROM :"schema_name".partners_realms WHERE partner_id=:'partner_id';
+COMMIT;
+EOF
+}
+
+activate () {
+        partner_id="$1"
+        if [ "x" = "x${partner_id}" ]; then
+                printdef
+        fi
+
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" <<EOF
+BEGIN;
+        UPDATE :"schema_name".partners SET is_active=true WHERE partner_id=:'partner_id';
+COMMIT;
+EOF
+}
+
+deactivate () {
+        partner_id="$1"
+        if [ "x" = "x${partner_id}" ]; then
+                printdef
+        fi
+
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" <<EOF
+BEGIN;
+        UPDATE :"schema_name".partners SET is_active=false WHERE partner_id=:'partner_id';
+COMMIT;
+EOF
+}
+
+attachdc () {
+        partner_id="$1"
+        realm_id="$2"
+        if [ "x" = "x${partner_id}" -o "x" = "x${realm_id}" ]; then
+                printdef
+        fi
+
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" \
+    --set realm_id="${realm_id}" <<EOF
+BEGIN;
+        INSERT INTO :"schema_name".partners_realms (partner_id,realm_id) VALUES (:'partner_id', :'realm_id');
+COMMIT;
+EOF
+}
+
+detachdc () {
+        partner_id="$1"
+        realm_id="$2"
+        if [ "x" = "x${partner_id}" -o "x" = "x${realm_id}" ]; then
+                printdef
+        fi
+
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" \
+    --set realm_id="${realm_id}" <<EOF
+BEGIN;
+        DELETE FROM :"schema_name".partners_realms WHERE partner_id=:'partner_id' AND realm_id=:'realm_id';
 COMMIT;
 EOF
 }
@@ -91,7 +160,7 @@ opt="$1"
 shift
 
 case "$opt" in
-        -h, --help)
+        -h,--help)
                 printdef
                 ;;
         add)
@@ -105,6 +174,18 @@ case "$opt" in
                 ;;
         list)
                 listpartners "$@"
+                ;;
+        activate)
+                activate "$@"
+                ;;
+        deactivate)
+                deactivate "$@"
+                ;;
+        attachdc)
+                attachdc "$@"
+                ;;
+        detachdc)
+                detachdc "$@"
                 ;;
         *)
                 printdef

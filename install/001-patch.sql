@@ -14,7 +14,9 @@ CREATE TABLE :"schema_name".partners (
 CREATE TABLE :"schema_name".partners_tokens (
     partner_id          uuid NOT NULL REFERENCES :"schema_name".partners (partner_id),
     token               partner_token NOT NULL,
-    created_at          timestamp without time zone DEFAULT now()
+    name                text NOT NULL,
+    created_at          timestamp without time zone DEFAULT now(),
+    UNIQUE (partner_id, token)
 );
 
 

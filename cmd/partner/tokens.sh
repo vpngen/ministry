@@ -75,10 +75,10 @@ listkeys () {
     --set partner_id="${partner_id}" <<EOF
 BEGIN;
         SELECT 
-        CONCAT('    token: ',translate(encode(t.token, 'base64'),'+/=','-_'), ':', t.name, ' pid: ', partner_id, ' name: ', p.partner, ' ', p.is_active)
+        CONCAT('    token: ',translate(encode(t.token, 'base64'),'+/=','-_'), ':', t.name, ' pid: ', p.partner_id, ' name: "', p.partner, '" status: ', p.is_active)
         FROM 
                 :"schema_name".partners_tokens AS t
-                LEFT JOIN :"schema_name".partners AS p ON p.id=t.partner_id;
+                LEFT JOIN :"schema_name".partners AS p ON p.partner_id=t.partner_id;
 COMMIT;
 EOF
 }
@@ -111,6 +111,9 @@ case "$opt" in
                 ;;
         delkey)
                 delkey "$@"
+                ;;
+        listkeys)
+                listkeys "$@"
                 ;;
         *)
                 printdef

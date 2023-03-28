@@ -69,6 +69,20 @@ EOF
         echo "Deleted token ${token_name} for partner ${partner_id}"
 }
 
+listkeys () {
+        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
+    --set schema_name="${SCHEMA}" \
+    --set partner_id="${partner_id}" <<EOF
+BEGIN;
+        SELECT 
+        CONCAT('    token: ',translate(encode(t.token, 'base64'),'+/=','-_'), ':', t.name, ' pid: ', partner_id, ' name: ', p.partner, ' ', p.is_active)
+        FROM 
+                :"schema_name".partners_tokens AS t
+                LEFT JOIN :"schema_name".partners AS p ON p.id=t.partner_id;
+COMMIT;
+EOF
+}
+
 CONFDIR=${CONFDIR:-"/etc/vgdept"}
 echo "confdir: ${CONFDIR}"
 DBNAME=${DBNAME:-$(cat ${CONFDIR}/dbname)}

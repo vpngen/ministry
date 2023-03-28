@@ -70,10 +70,12 @@ const (
 				$1, $2, $3,
 				pr.realm_id, pr.partner_id 
 			FROM 
-				%s AS t  					  -- partners_tokens
-				LEFT JOIN %s AS pr ON pr.partner_id=t.partner_id  -- partners_realms
+				%s AS t 					-- partners_tokens
+				JOIN  %s AS p ON p.partner_id=t.partner_id      -- partners
+				JOIN %s AS pr ON pr.partner_id=p.partner_id     -- partners_realms
 			WHERE
-				t.token=$4
+				p.is_active=true
+				AND t.token=$4
 			ORDER BY RANDOM() LIMIT 1
 	`
 	sqlCreateBrigadierSalt = `
@@ -336,6 +338,7 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte) (uuid.UUID, st
 				sqlCreateBrigadier,
 				pgx.Identifier{schema, "brigadiers"}.Sanitize(),
 				pgx.Identifier{schema, "partners_tokens"}.Sanitize(),
+				pgx.Identifier{schema, "partners"}.Sanitize(),
 				pgx.Identifier{schema, "partners_realms"}.Sanitize(),
 			),
 			id,

@@ -49,11 +49,14 @@ const maxCollisionAttemts = 1000
 const (
 	sqlCheckToken = `
 	SELECT
-		token
+		t.token
 	FROM
-		%s
+		%s AS t
+		JOIN %s AS p ON p.partner_id=t.partner_id
 	WHERE
-		token=$1
+		p.is_active=true
+		AND t.token=$1
+	LIMIT 1
 	`
 
 	sqlCreateBrigadier = `
@@ -310,7 +313,11 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte) (uuid.UUID, st
 	}
 
 	t := make([]byte, 32) // just to check if token exists.
-	err = tx.QueryRow(ctx, fmt.Sprintf(sqlCheckToken, pgx.Identifier{schema, "partners_tokens"}.Sanitize()), token).Scan(&t)
+	err = tx.QueryRow(ctx, fmt.Sprintf(sqlCheckToken,
+		pgx.Identifier{schema, "partners_tokens"}.Sanitize(),
+		pgx.Identifier{schema, "partners"}.Sanitize()),
+		token,
+	).Scan(&t)
 	if err != nil {
 		tx.Rollback(ctx)
 

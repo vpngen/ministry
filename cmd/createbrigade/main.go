@@ -14,7 +14,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,6 +47,15 @@ const (
 const maxCollisionAttemts = 1000
 
 const (
+	sqlCheckToken = `
+	SELECT
+		token
+	FROM
+		%s
+	WHERE
+		token=$1
+	`
+
 	sqlCreateBrigadier = `
 	INSERT INTO
 		%s
@@ -65,7 +73,7 @@ const (
 				%s AS t  					  -- partners_tokens
 				LEFT JOIN %s AS pr ON pr.partner_id=t.partner_id  -- partners_realms
 			WHERE
-				t.token=decode($4, 'base64')
+				t.token=$4
 			ORDER BY RANDOM() LIMIT 1
 	`
 	sqlCreateBrigadierSalt = `
@@ -108,6 +116,11 @@ const (
 	`
 )
 
+var (
+	errEmptyAccessToken = errors.New("token not specified")
+	errAccessDenied     = errors.New("access denied")
+)
+
 const defaultSeedExtra = "даблять"
 
 var seedExtra string // extra data for seed
@@ -122,24 +135,14 @@ func init() {
 func main() {
 	var w io.WriteCloser
 
-	sshAuth := os.Getenv("SSH_USER_AUTH")
-	if sshAuth == "" {
-		log.Fatalf("SSH_USER_AUTH not specified")
-	}
-
-	token, err := sshParseAuth(sshAuth)
-	if err != nil {
-		log.Fatalf("Can't parse SSH_USER_AUTH: %s\n", err)
-	}
-
-	fmt.Printf("token: %s\n", token)
+	// fmt.Printf("token: %s\n", token)
 
 	confDir := os.Getenv("CONFDIR")
 	if confDir == "" {
 		confDir = etcDefaultPath
 	}
 
-	chunked, err := parseArgs()
+	chunked, token, err := parseArgs()
 	if err != nil {
 		log.Fatalf("Can't parse args: %s\n", err)
 	}
@@ -289,7 +292,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	return wgconfx, fullname, person.Name, desc64, url64, nil
 }
 
-func createBrigade(db *pgxpool.Pool, schema string, token string) (uuid.UUID, string, error) {
+func createBrigade(db *pgxpool.Pool, schema string, token []byte) (uuid.UUID, string, error) {
 	id := uuid.New()
 
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
@@ -302,6 +305,14 @@ func createBrigade(db *pgxpool.Pool, schema string, token string) (uuid.UUID, st
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return id, "", fmt.Errorf("begin: %w", err)
+	}
+
+	t := make([]byte, 32) // just to check if token exists.
+	err = tx.QueryRow(ctx, fmt.Sprintf(sqlCheckToken, pgx.Identifier{schema, "partners_tokens"}.Sanitize()), token).Scan(&t)
+	if err != nil {
+		tx.Rollback(ctx)
+
+		return id, "", errAccessDenied
 	}
 
 	bcnt := 0
@@ -462,31 +473,21 @@ func createSSHConfig(path string) (*ssh.ClientConfig, error) {
 	return config, nil
 }
 
-func parseArgs() (bool, error) {
+func parseArgs() (bool, []byte, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 
 	flag.Parse()
 
-	return *chunked, nil
-}
-
-func sshParseAuth(filename string) (string, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return "", fmt.Errorf("open: %w", err)
+	a := flag.Args()
+	if len(a) < 1 {
+		return false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
 	}
 
-	buf, err := io.ReadAll(io.LimitReader(f, maxSSHAuthLen))
+	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
+	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return "", fmt.Errorf("read: %w", err)
+		return false, nil, fmt.Errorf("access token: %w", err)
 	}
 
-	key, _, _, _, err := ssh.ParseAuthorizedKey(buf)
-	if err != nil {
-		return "", fmt.Errorf("parse: %w", err)
-	}
-
-	// dirty hack, ssh.FingerprintSHA256 returns base64 encoded string without padding
-	// but with SHA256: prefix
-	return strings.TrimPrefix(ssh.FingerprintSHA256(key), sshSHA256Prefix) + "=", nil
+	return *chunked, token, nil
 }

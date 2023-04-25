@@ -7,7 +7,7 @@ USERNAME="_valera_"
 REALM="10.10.100.252"
 REASON="never_visited"
 
-DAYS=${DAYS:-"3"}
+DAYS=${DAYS:-"1"}
 NUMS=${NUMS:-"10"}
 
 cmd="getwasted -d ${DAYS} -n ${NUMS}"

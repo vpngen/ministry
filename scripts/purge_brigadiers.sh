@@ -15,7 +15,7 @@ list=$(psql -d "${DBNAME}" -t -A -q \
 BEGIN;
         SELECT 
                  NOW() AT TIME ZONE 'UTC',
-                 b.brigadier, d.* 
+                 b.brigadier, b.created_at, d.* 
         FROM 
                 :"schema_name".deleted_brigadiers AS d 
         LEFT JOIN 

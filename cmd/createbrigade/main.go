@@ -130,6 +130,19 @@ const defaultSeedExtra = "даблять"
 
 var seedExtra string // extra data for seed
 
+var LogTag = setLogTag()
+
+const defaultLogTag = "addbrigade"
+
+func setLogTag() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return defaultLogTag
+	}
+
+	return filepath.Base(executable)
+}
+
 func init() {
 	seedExtra = os.Getenv("SEED_EXTRA")
 	if seedExtra == "" {
@@ -149,33 +162,33 @@ func main() {
 
 	chunked, token, err := parseArgs()
 	if err != nil {
-		log.Fatalf("Can't parse args: %s\n", err)
+		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
 
 	dbname, schema, err := readConfigs(confDir)
 	if err != nil {
-		log.Fatalf("Can't read configs: %s\n", err)
+		log.Fatalf("%s: Can't read configs: %s\n", LogTag, err)
 	}
 
 	sshconf, err := createSSHConfig(confDir)
 	if err != nil {
-		log.Fatalf("Can't create ssh configs: %s\n", err)
+		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
 
 	db, err := createDBPool(dbname)
 	if err != nil {
-		log.Fatalf("Can't create db pool: %s\n", err)
+		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
 
 	id, mnemo, err := createBrigade(db, schema, token)
 	if err != nil {
-		log.Fatalf("Can't create brigade: %s\n", err)
+		log.Fatalf("%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
 	// wgconfx = wgconf + keydesk IP
 	wgconfx, fullname, person, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
 	if err != nil {
-		log.Fatalf("Can't request brigade: %s\n", err)
+		log.Fatalf("%s: Can't request brigade: %s\n", LogTag, err)
 	}
 
 	switch chunked {
@@ -188,28 +201,28 @@ func main() {
 
 	_, err = fmt.Fprintln(w, fullname)
 	if err != nil {
-		log.Fatalf("Can't print fullname: %s\n", err)
+		log.Fatalf("%s: Can't print fullname: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, person)
 	if err != nil {
-		log.Fatalf("Can't print person: %s\n", err)
+		log.Fatalf("%s: Can't print person: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, desc64)
 	if err != nil {
-		log.Fatalf("Can't print desc: %s\n", err)
+		log.Fatalf("%s: Can't print desc: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, url64)
 	if err != nil {
-		log.Fatalf("Can't print url: %s\n", err)
+		log.Fatalf("%s: Can't print url: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, mnemo)
 	if err != nil {
-		log.Fatalf("Can't print memo: %s\n", err)
+		log.Fatalf("%s: Can't print memo: %s\n", LogTag, err)
 	}
 
 	_, err = w.Write(wgconfx)
 	if err != nil {
-		log.Fatalf("Can't print wgconfx: %s\n", err)
+		log.Fatalf("%s: Can't print wgconfx: %s\n", LogTag, err)
 	}
 }
 
@@ -262,7 +275,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		url64,
 	)
 
-	fmt.Fprintf(os.Stderr, "%s#%s:22 -> %s\n", sshkeyRemoteUsername, control_ip, cmd)
+	fmt.Fprintf(os.Stderr, "%s: %s#%s:22 -> %s\n", LogTag, sshkeyRemoteUsername, control_ip, cmd)
 
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", control_ip), sshconf)
 	if err != nil {
@@ -282,14 +295,18 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	session.Stderr = &e
 
 	if err := session.Run(cmd); err != nil {
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, e.String())
 
 		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
 	}
 
+	if errstr := e.String(); errstr != "" {
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
+	}
+
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "readed data:\n%s\n", wgconfx)
+		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
 
 		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
 	}

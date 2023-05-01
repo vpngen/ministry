@@ -43,8 +43,6 @@ const (
 	sshTimeOut           = time.Duration(5 * time.Second)
 )
 
-const nullTime = -62135596800
-
 const defaultSeedExtra = "даблять"
 
 const sqlFetchBrigadier = `
@@ -71,78 +69,153 @@ func init() {
 	}
 }
 
+var LogTag = setLogTag()
+
+const defaultLogTag = "restorebrigadier"
+
+func setLogTag() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return defaultLogTag
+	}
+
+	return filepath.Base(executable)
+}
+
 func main() {
+	var w io.WriteCloser
+
 	confDir := os.Getenv("CONFDIR")
 	if confDir == "" {
 		confDir = etcDefaultPath
 	}
 
-	name, mnemo, chkDel, bless, err := parseArgs()
+	name, mnemo, dryRun, chunked, _, err := parseArgs()
 	if err != nil {
-		log.Fatalf("Can't parse args: %s\n", err)
+		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
 
 	dbname, schema, err := readConfigs(confDir)
 	if err != nil {
-		log.Fatalf("Can't read configs: %s\n", err)
+		log.Fatalf("%s: Can't read configs: %s\n", LogTag, err)
 	}
 
 	db, err := createDBPool(dbname)
 	if err != nil {
-		log.Fatalf("Can't create db pool: %s\n", err)
+		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
+	}
+
+	switch chunked {
+	case true:
+		w = httputil.NewChunkedWriter(os.Stdout)
+		defer w.Close()
+	default:
+		w = os.Stdout
 	}
 
 	salt, err := saltByName(db, schema, name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Fatalf("Brigadier %q is not found\n", name)
+			fmt.Fprintln(w, "NOTFOUND")
+
+			return
 		}
 
-		log.Fatalf("Can't find a brigadier: %s\n", err)
+		log.Fatalf("%s: Can't find a brigadier: %s\n", LogTag, err)
 	}
 
 	key := seedgenerator.SeedFromSaltMnemonics(mnemo, seedExtra, salt)
 
-	ok, id, del, delTime, delReason, err := checkKey(db, schema, name, key)
+	id, del, delTime, delReason, addr, err := checkKey(db, schema, name, key)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Fatalf("Invalid mnemonics for brigadier %q\n", name)
+			fmt.Fprintln(w, "NOTFOUND")
+
+			return
 		}
 
-		log.Fatalf("Can't find key: %s\n", err)
-	}
-
-	if !ok {
-		log.Fatalln("FAILD")
-	}
-
-	log.Println("SUCCESS")
-
-	if chkDel {
-		switch del {
-		case true:
-			log.Printf("DELETED: %s: %s\n", delReason, delTime.Format(time.RFC3339))
-		default:
-			log.Println("ALIVE")
-		}
-	}
-
-	if !bless || !del {
-		return
+		log.Fatalf("%s: Can't find key: %s\n", LogTag, err)
 	}
 
 	sshconf, err := createSSHConfig(confDir)
 	if err != nil {
-		log.Fatalf("Can't create ssh configs: %s\n", err)
+		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
 
-	wgconf, err := blessBrigade(db, schema, sshconf, id)
+	switch del {
+	case true:
+		fmt.Fprintf(os.Stderr, "%s: DELETED: %s: %s\n", LogTag, delReason, delTime.Format(time.RFC3339))
+
+		if dryRun {
+			return
+		}
+
+		wgconf, err := blessBrigade(db, schema, sshconf, id)
+		if err != nil {
+			log.Fatalf("%s: Can't bless brigade: %s", LogTag, err)
+		}
+
+		fmt.Fprintln(w, "WGCONFIG")
+		fmt.Fprintln(w, string(wgconf))
+	default:
+		fmt.Fprintf(os.Stderr, "%s: ALIVE", LogTag)
+
+		if dryRun {
+			return
+		}
+
+		wgconf, err := replaceBrigadier(db, schema, sshconf, addr, id)
+		if err != nil {
+			log.Fatalf("%s: Can't replace brigade: %s", LogTag, err)
+		}
+
+		fmt.Fprintln(w, "WGCONFIG")
+		fmt.Fprintln(w, string(wgconf))
+	}
+}
+
+func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, controlIP netip.Addr, id uuid.UUID) ([]byte, error) {
+	cmd := fmt.Sprintf("replacebrigadier -ch -id %s",
+		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
+	)
+
+	fmt.Fprintf(os.Stderr, "%s#%s:22 -> %s\n", sshkeyRemoteUsername, controlIP, cmd)
+
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", controlIP), sshconf)
 	if err != nil {
-		log.Fatalf("Can't bless brigade: %s", err)
+		return nil, fmt.Errorf("ssh dial: %w", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("ssh session: %w", err)
+	}
+	defer session.Close()
+
+	var b, e bytes.Buffer
+
+	session.Stdout = &b
+	session.Stderr = &e
+
+	if err := session.Run(cmd); err != nil {
+		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
+
+		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 
-	log.Println("WGCONFIG:")
-	fmt.Println(string(wgconf))
+	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
+
+		return nil, fmt.Errorf("chunk read: %w", err)
+	}
+
+	if errstr := e.String(); errstr != "" {
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
+	}
+
+	return wgconfx, nil
 }
 
 func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, error) {
@@ -221,9 +294,13 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "readed data:\n%s\n", wgconfx)
+		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
 
 		return nil, fmt.Errorf("chunk read: %w", err)
+	}
+
+	if errstr := e.String(); errstr != "" {
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
 	}
 
 	tx, err = db.Begin(ctx)
@@ -252,28 +329,31 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 	return wgconfx, nil
 }
 
-func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (bool, uuid.UUID, bool, time.Time, string, error) {
+func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, bool, time.Time, string, netip.Addr, error) {
 	ctx := context.Background()
 	emptyTime := time.Time{}
+	emptyAddr := netip.Addr{}
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return false, uuid.Nil, false, emptyTime, "", fmt.Errorf("begin: %w", err)
+		return uuid.Nil, false, emptyTime, "", emptyAddr, fmt.Errorf("begin: %w", err)
 	}
 
 	var (
-		id      pgtype.UUID
-		getname string
-		dt      pgtype.Timestamp
-		dr      pgtype.Text
+		id             pgtype.UUID
+		getName        string
+		controlIP      netip.Addr
+		deletedTime    pgtype.Timestamp
+		deletionReason pgtype.Text
 	)
 
 	sqlSaltByName := `SELECT
 		brigadiers.brigade_id,
 		brigadiers.brigadier,
-		deleted_at,
-		reason
-	FROM %s, %s
+		realms.control_ip,
+		deleted_brigadiers.deleted_at,
+		deleted_brigadiers.reason
+	FROM %s, %s, %s
 	LEFT JOIN %s ON 
 		brigadiers.brigade_id=deleted_brigadiers.brigade_id
 	WHERE
@@ -282,34 +362,38 @@ func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (bool, uuid.UUI
 		brigadier_keys.key=$2
 	AND
 		brigadiers.brigade_id=brigadier_keys.brigade_id
+	AND
+		brigadiers.realm_id=realms.realm_id
 	`
 
 	err = tx.QueryRow(ctx,
 		fmt.Sprintf(sqlSaltByName,
 			(pgx.Identifier{schema, "brigadier_keys"}.Sanitize()),
 			(pgx.Identifier{schema, "brigadiers"}.Sanitize()),
+			(pgx.Identifier{schema, "realms"}.Sanitize()),
 			(pgx.Identifier{schema, "deleted_brigadiers"}.Sanitize()),
 		),
 		name,
 		key,
 	).Scan(
 		&id,
-		&getname,
-		&dt,
-		&dr,
+		&getName,
+		&controlIP,
+		&deletedTime,
+		&deletionReason,
 	)
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return false, uuid.Nil, false, emptyTime, "", fmt.Errorf("key query: %w", err)
+		return uuid.Nil, false, emptyTime, "", emptyAddr, fmt.Errorf("key query: %w", err)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return false, uuid.Nil, false, emptyTime, "", fmt.Errorf("commit: %w", err)
+		return uuid.Nil, false, emptyTime, "", emptyAddr, fmt.Errorf("commit: %w", err)
 	}
 
-	return true, uuid.UUID(id.Bytes), dt.Time.Unix() != nullTime, dt.Time, dr.String, nil
+	return uuid.UUID(id.Bytes), deletedTime.Valid, deletedTime.Time, deletionReason.String, controlIP, nil
 }
 
 func saltByName(db *pgxpool.Pool, schema, name string) ([]byte, error) {
@@ -384,17 +468,22 @@ func readConfigs(path string) (string, string, error) {
 	return string(dbname), string(schema), nil
 }
 
-func parseArgs() (string, string, bool, bool, error) {
-	checkDel := flag.Bool("chkdel", false, "Check deletion status")
-	recreate := flag.Bool("bless", false, "Recreate brigade")
+func parseArgs() (string, string, bool, bool, bool, error) {
+	dryRun := flag.Bool("n", false, "Dry run")
+	chunked := flag.Bool("ch", false, "chunked output")
+	jsonOut := flag.Bool("j", false, "json output")
 
 	flag.Parse()
 
 	if flag.NArg() != 2 {
-		return "", "", false, false, fmt.Errorf("args: %w", errInvalidArgs)
+		return "", "", false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
 	}
 
-	return strings.Join(strings.Fields(flag.Arg(0)), " "), strings.Join(strings.Fields(flag.Arg(1)), " "), *checkDel, *recreate, nil
+	return sanitizeNames(flag.Arg(0)), sanitizeNames(flag.Arg(1)), *dryRun, *chunked, *jsonOut, nil
+}
+
+func sanitizeNames(name string) string {
+	return strings.Join(strings.Fields(strings.Replace(name, ",", " ", -1)), " ")
 }
 
 func createSSHConfig(path string) (*ssh.ClientConfig, error) {

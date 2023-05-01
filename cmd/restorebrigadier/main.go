@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gofrs/uuid"
 	"github.com/jackc/pgx/v5"
@@ -479,7 +480,19 @@ func parseArgs() (string, string, bool, bool, bool, error) {
 		return "", "", false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
 	}
 
-	return sanitizeNames(flag.Arg(0)), sanitizeNames(flag.Arg(1)), *dryRun, *chunked, *jsonOut, nil
+	// implicit base64 decoding
+
+	name := flag.Arg(0)
+	if buf, err := base64.StdEncoding.DecodeString(name); err == nil && utf8.Valid(buf) {
+		name = string(buf)
+	}
+
+	words := flag.Arg(1)
+	if buf, err := base64.StdEncoding.DecodeString(words); err == nil && utf8.Valid(buf) {
+		words = string(buf)
+	}
+
+	return sanitizeNames(name), sanitizeNames(words), *dryRun, *chunked, *jsonOut, nil
 }
 
 func sanitizeNames(name string) string {

@@ -449,7 +449,7 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo s
 	}
 
 	_, err = tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateBrigadeEvent, (pgx.Identifier{schema, "brigades_events"}.Sanitize())),
+		fmt.Sprintf(sqlCreateBrigadeEvent, (pgx.Identifier{schema, "brigades_actions"}.Sanitize())),
 		id,
 		creationInfo,
 	)

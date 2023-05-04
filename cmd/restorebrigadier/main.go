@@ -295,7 +295,7 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, e.String())
 
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}

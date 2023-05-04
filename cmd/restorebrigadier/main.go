@@ -322,6 +322,25 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("delete deleted: %w", err)
 	}
 
+	sqlRestoreEventAdd := `
+INSERT INTO 
+	%s 
+	(brigade_id, event_type, event_time, event_info) 
+VALUES 
+	($1, 'restore_brigade', NOW(), 'ssh_api')
+`
+	_, err = tx.Exec(ctx,
+		fmt.Sprintf(sqlRestoreEventAdd,
+			(pgx.Identifier{schema, "brigade_actions"}.Sanitize()),
+		),
+		id,
+	)
+	if err != nil {
+		tx.Rollback(ctx)
+
+		return nil, fmt.Errorf("insert restore: %w", err)
+	}
+
 	err = tx.Commit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("commit: %w", err)

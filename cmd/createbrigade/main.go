@@ -113,7 +113,7 @@ const (
 		(
 			brigade_id,
 			event_name,
-			event_description,
+			event_info,
 			event_time
 		)
 	VALUES

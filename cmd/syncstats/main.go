@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/ssh"
 )
@@ -40,30 +39,56 @@ const UpdateTimeResultVersion = 1
 
 // UpdateTimeResult - is a struct for last update time result.
 type UpdateTimeResult struct {
-	Version    int       `json:"version"`
-	UpdateTime time.Time `json:"update_time"`
+	Version            int       `json:"version"`
+	UpdateTimeIDs      time.Time `json:"ids_update_time"`
+	UpdateTimePartners time.Time `json:"partners_update_time"`
+	UpdateTimeRealms   time.Time `json:"realms_update_time"`
+	UpdateTimeActions  time.Time `json:"actions_update_time"`
 }
 
-// IDUpdate - is a struct of a table brigades_ids.
-type IDUpdate struct {
+// IDsUpdate - is a struct of a table brigades_ids.
+type IDsUpdate struct {
 	BrigadeID  string    `json:"brigade_id"`
 	RealmID    string    `json:"realm_id"`
 	PartnerID  string    `json:"partner_id"`
-	Reason     string    `json:"reason,omitempty"`
-	CreatedAt  time.Time `json:"created_at,omitempty"`
-	DeletedAt  time.Time `json:"deleted_at,omitempty"`
-	PurgedAt   time.Time `json:"purged_at,omitempty"`
 	UpdateTime time.Time `json:"update_time"`
 }
 
-// IDUpdatesPackVersion - is a version of IDUpdatesPack struct.
-const IDUpdatesPackVersion = 1
+// RealmsUpdate - is a struct of a table brigades_realms.
+type PartnersUpdate struct {
+	PartnerID   string    `json:"partner_id"`
+	PartnerName string    `json:"partner_name"`
+	UpdateTime  time.Time `json:"update_time"`
+}
 
-// IDUpdatesPack - is a update pack for brigades_ids table.
-type IDUpdatesPack struct {
-	Version    int        `json:"version"`
-	Updates    []IDUpdate `json:"updates"`
-	UpdateTime time.Time  `json:"update_time"`
+// RealmsUpdate - is a struct of a table brigades_realms.
+type RealmsUpdate struct {
+	RealmID    string    `json:"realm_id"`
+	RealmName  string    `json:"realm_name"`
+	UpdateTime time.Time `json:"update_time"`
+}
+
+// ActionsUpdate - is a struct of a table brigades_actions.
+type ActionsUpdate struct {
+	BrigadeID  string    `json:"brigade_id"`
+	EventName  string    `json:"event_name"`
+	EventInfo  string    `json:"event_info"`
+	EventTime  time.Time `json:"event_time"`
+	UpdateTime time.Time `json:"update_time"`
+}
+
+// UpdatesPackVersion - is a version of IDUpdatesPack struct.
+const UpdatesPackVersion = 1
+
+// UpdatesPack - is a update pack for brigades_ids table.
+type UpdatesPack struct {
+	Version         int              `json:"version"`
+	RealmsUpdates   []RealmsUpdate   `json:"updates_realms"`
+	PartnersUpdates []PartnersUpdate `json:"updates_partners"`
+	IDsUpdates      []IDsUpdate      `json:"updates_ids"`
+	ActionsUpdates  []ActionsUpdate  `json:"updates_actions"`
+	UpdatesFrom     UpdateTimeResult `json:"updates_from"`
+	UpdateTime      time.Time        `json:"update_time"`
 }
 
 func main() {
@@ -74,7 +99,7 @@ func main() {
 		log.Fatalf("Read configs: %s", err)
 	}
 
-	addr2, err := parseArgs()
+	dryRun, addr2, err := parseArgs()
 	if err != nil {
 		log.Fatalf("Parse args: %s", err)
 	}
@@ -98,34 +123,66 @@ func main() {
 		log.Fatalf("Create DB pool: %s", err)
 	}
 
-	if err := syncIDs(sshConfig, addr, dbPool, schema); err != nil {
+	fmt.Fprintf(os.Stderr, "Fetching last updates from %s\n", addr)
+
+	lastUpdates, err := fetchLastUpdates(sshConfig, addr)
+	if err != nil {
+		log.Fatalf("Can't fetch last updates: %s", err)
+	}
+
+	realms, err := syncRealms(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimeRealms)
+	if err != nil {
+		log.Fatalf("Sync realms: %s", err)
+	}
+
+	log.Println(realms)
+
+	partners, err := syncPanters(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimePartners)
+	if err != nil {
+		log.Fatalf("Sync partners: %s", err)
+	}
+
+	log.Println(partners)
+
+	ids, err := syncIDs(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimeIDs)
+	if err != nil {
 		log.Fatalf("Sync IDs: %s", err)
 	}
+
+	log.Println(ids)
+
+	actions, err := syncActions(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimeActions)
+	if err != nil {
+		log.Fatalf("Sync actions: %s", err)
+	}
+
+	log.Println(actions)
+
+	pack := &UpdatesPack{
+		Version:         UpdatesPackVersion,
+		RealmsUpdates:   realms,
+		PartnersUpdates: partners,
+		IDsUpdates:      ids,
+		ActionsUpdates:  actions,
+		UpdatesFrom:     lastUpdates,
+		UpdateTime:      time.Now().UTC(),
+	}
+
+	if dryRun {
+		buf, err := json.MarshalIndent(pack, "", "  ")
+		if err != nil {
+			log.Fatalf("Marshal updates pack: %s", err)
+		}
+
+		fmt.Println(string(buf))
+	}
+
+	if err := applyUpdates(sshConfig, addr, pack); err != nil {
+		log.Fatalf("Apply updates: %s", err)
+	}
 }
 
-func syncIDs(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string) error {
-	lastUpdate, err := fetchLastUpdate(sshConfig, addr)
-	if err != nil {
-		return fmt.Errorf("fetch last update: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Last update: %s\n", lastUpdate.Format(time.RFC3339Nano))
-
-	updates, err := prepareUpdates(dbPool, schema, lastUpdate)
-	if err != nil {
-		return fmt.Errorf("prepare updates: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Updates count: %d\n", len(updates.Updates))
-
-	if err := applyUpdates(sshConfig, addr, updates); err != nil {
-		return fmt.Errorf("apply updates: %w", err)
-	}
-
-	return nil
-}
-
-func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *IDUpdatesPack) error {
+func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *UpdatesPack) error {
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", addr), sshConfig)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
@@ -170,12 +227,27 @@ func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *IDUpdatesPa
 		return fmt.Errorf("wait: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "<<<<<\n%s\n>>>>>\n", e.String())
+	if e.String() != "" {
+		fmt.Fprintf(os.Stderr, "<<<<<\n%s\n>>>>>\n", e.String())
+	}
 
 	return nil
 }
 
-func prepareUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (*IDUpdatesPack, error) {
+func syncActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsUpdate, error) {
+	fmt.Fprintf(os.Stderr, "Requst actions updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
+
+	updates, err := queryActionsUpdates(dbPool, schema, lastUpdate)
+	if err != nil {
+		return nil, fmt.Errorf("query actions updates: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Actions updates: %d\n", len(updates))
+
+	return updates, nil
+}
+
+func queryActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsUpdate, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -185,7 +257,239 @@ func prepareUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (*IDU
 
 	defer tx.Rollback(ctx)
 
-	sqlGetIDs := `SELECT * FROM %s WHERE update_time >= $1`
+	sqlGetActions := `SELECT brigade_id, event_name, event_info, event_time,update_time FROM %s WHERE update_time >= $1`
+	rows, err := tx.Query(
+		ctx,
+		fmt.Sprintf(
+			sqlGetActions,
+			(pgx.Identifier{schema, "brigades_actions"}).Sanitize(),
+		),
+		lastUpdate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	defer rows.Close()
+
+	var (
+		updates    = []ActionsUpdate{}
+		brigadeID  string
+		eventName  string
+		eventInfo  string
+		eventTime  time.Time
+		updateTime time.Time
+	)
+
+	if rows.CommandTag().RowsAffected() == 0 {
+		return updates, nil
+	}
+
+	_, err = pgx.ForEachRow(
+		rows,
+		[]any{
+			&brigadeID,
+			&eventName,
+			&eventInfo,
+			&eventTime,
+			&updateTime,
+		},
+		func() error {
+			updates = append(
+				updates,
+				ActionsUpdate{
+					BrigadeID:  brigadeID,
+					EventName:  eventName,
+					EventInfo:  eventInfo,
+					EventTime:  eventTime,
+					UpdateTime: updateTime,
+				},
+			)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("for each row: %w", err)
+	}
+
+	return updates, nil
+}
+
+func syncPanters(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
+	fmt.Fprintf(os.Stderr, "Requst partners updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
+
+	updates, err := queryPartnersUpdates(dbPool, schema, lastUpdate)
+	if err != nil {
+		return nil, fmt.Errorf("query partners updates: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Realms updates: %d\n", len(updates))
+
+	return updates, nil
+}
+
+func queryPartnersUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
+	ctx := context.Background()
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	sqlGetPartners := `SELECT partner_id,partner,update_time FROM %s WHERE update_time >= $1`
+	rows, err := tx.Query(
+		ctx,
+		fmt.Sprintf(
+			sqlGetPartners,
+			(pgx.Identifier{schema, "partners"}).Sanitize(),
+		),
+		lastUpdate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	defer rows.Close()
+
+	var (
+		updates     = []PartnersUpdate{}
+		partnerID   string
+		partnerName string
+		updateTime  time.Time
+	)
+
+	if rows.CommandTag().RowsAffected() == 0 {
+		return updates, nil
+	}
+
+	_, err = pgx.ForEachRow(
+		rows,
+		[]any{
+			&partnerID,
+			&partnerName,
+			&updateTime,
+		},
+		func() error {
+			updates = append(
+				updates,
+				PartnersUpdate{
+					PartnerID:   partnerID,
+					PartnerName: partnerID,
+					UpdateTime:  updateTime,
+				},
+			)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("for each row: %w", err)
+	}
+
+	return updates, nil
+}
+
+func syncRealms(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]RealmsUpdate, error) {
+	fmt.Fprintf(os.Stderr, "Requst realms updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
+
+	updates, err := queryRealmsUpdates(dbPool, schema, lastUpdate)
+	if err != nil {
+		return nil, fmt.Errorf("query realms updates: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Realms updates: %d\n", len(updates))
+
+	return updates, nil
+}
+
+func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]RealmsUpdate, error) {
+	ctx := context.Background()
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	sqlGetRealms := `SELECT realm_id,update_time FROM %s WHERE update_time >= $1`
+	rows, err := tx.Query(
+		ctx,
+		fmt.Sprintf(
+			sqlGetRealms,
+			(pgx.Identifier{schema, "realms"}).Sanitize(),
+		),
+		lastUpdate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	defer rows.Close()
+
+	var (
+		updates    = []RealmsUpdate{}
+		realmID    string
+		updateTime time.Time
+	)
+
+	if rows.CommandTag().RowsAffected() == 0 {
+		return updates, nil
+	}
+
+	_, err = pgx.ForEachRow(
+		rows,
+		[]any{
+			&realmID,
+			&updateTime,
+		},
+		func() error {
+			updates = append(
+				updates,
+				RealmsUpdate{
+					RealmID:    realmID,
+					RealmName:  realmID,
+					UpdateTime: updateTime,
+				},
+			)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("for each row: %w", err)
+	}
+
+	return updates, nil
+}
+
+func syncIDs(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]IDsUpdate, error) {
+	fmt.Fprintf(os.Stderr, "Requst IDs updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
+
+	updates, err := queryIDsUpdates(dbPool, schema, lastUpdate)
+	if err != nil {
+		return nil, fmt.Errorf("query IDs updates: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "IDs updates: %d\n", len(updates))
+
+	return updates, nil
+}
+
+func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]IDsUpdate, error) {
+	ctx := context.Background()
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	sqlGetIDs := `SELECT brigade_id,realm_id,partner_id,update_time FROM %s WHERE update_time >= $1`
 	rows, err := tx.Query(
 		ctx,
 		fmt.Sprintf(
@@ -201,16 +505,16 @@ func prepareUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (*IDU
 	defer rows.Close()
 
 	var (
-		updatesPack = &IDUpdatesPack{Version: IDUpdatesPackVersion, UpdateTime: lastUpdate}
-		brigadeID   string
-		realmID     string
-		partnerID   string
-		reason      string
-		createdAt   time.Time
-		deletedAt   pgtype.Timestamp
-		purgedAt    pgtype.Timestamp
-		updateTime  time.Time
+		updates    = []IDsUpdate{}
+		brigadeID  string
+		realmID    string
+		partnerID  string
+		updateTime time.Time
 	)
+
+	if rows.CommandTag().RowsAffected() == 0 {
+		return updates, nil
+	}
 
 	_, err = pgx.ForEachRow(
 		rows,
@@ -218,23 +522,15 @@ func prepareUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (*IDU
 			&brigadeID,
 			&realmID,
 			&partnerID,
-			&reason,
-			&createdAt,
-			&deletedAt,
-			&purgedAt,
 			&updateTime,
 		},
 		func() error {
-			updatesPack.Updates = append(
-				updatesPack.Updates,
-				IDUpdate{
+			updates = append(
+				updates,
+				IDsUpdate{
 					BrigadeID:  brigadeID,
 					RealmID:    realmID,
 					PartnerID:  partnerID,
-					Reason:     reason,
-					CreatedAt:  createdAt,
-					DeletedAt:  deletedAt.Time,
-					PurgedAt:   purgedAt.Time,
 					UpdateTime: updateTime,
 				},
 			)
@@ -246,20 +542,22 @@ func prepareUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (*IDU
 		return nil, fmt.Errorf("for each row: %w", err)
 	}
 
-	return updatesPack, nil
+	return updates, nil
 }
 
-func fetchLastUpdate(sshConfig *ssh.ClientConfig, addr string) (time.Time, error) {
+func fetchLastUpdates(sshConfig *ssh.ClientConfig, addr string) (UpdateTimeResult, error) {
+	result := UpdateTimeResult{}
+
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", addr), sshConfig)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("dial: %w", err)
+		return result, fmt.Errorf("dial: %w", err)
 	}
 
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return time.Time{}, fmt.Errorf("new session: %w", err)
+		return result, fmt.Errorf("new session: %w", err)
 	}
 
 	defer session.Close()
@@ -273,25 +571,25 @@ func fetchLastUpdate(sshConfig *ssh.ClientConfig, addr string) (time.Time, error
 	if err := session.Run(cmd); err != nil {
 		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
 
-		return time.Time{}, fmt.Errorf("run: %w", err)
+		return result, fmt.Errorf("run: %w", err)
 	}
 
 	resp, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "readed data:\n%s\n", err)
 		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
 
-		return time.Time{}, fmt.Errorf("read data: %w", err)
+		return result, fmt.Errorf("read data: %w", err)
 	}
 
-	var result UpdateTimeResult
+	if e.String() != "" {
+		fmt.Fprintf(os.Stderr, "<<<<<\n%s\n>>>>>\n", e.String())
+	}
+
 	if err := json.Unmarshal(resp, &result); err != nil {
-		return time.Time{}, fmt.Errorf("unmarshal: %w", err)
+		return result, fmt.Errorf("unmarshal: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "<<<<<\n%s\n>>>>>\n", e.String())
-
-	return result.UpdateTime, nil
+	return result, nil
 }
 
 func createSSHConfig(path string) (*ssh.ClientConfig, error) {
@@ -334,11 +632,13 @@ func createDBPool(dburl string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func parseArgs() (string, error) {
+func parseArgs() (bool, string, error) {
 	addr := flag.String("a", "", "address of stats server")
+	dryRun := flag.Bool("n", false, "dry run")
+
 	flag.Parse()
 
-	return *addr, nil
+	return *dryRun, *addr, nil
 }
 
 func readConfigs() (string, string, string, string, error) {

@@ -26,11 +26,11 @@ import (
 )
 
 const (
-	dbnameFilename       = "dbname"
-	schemaNameFilename   = "schema"
-	sshkeyFilename       = "id_ecdsa"
-	sshkeyRemoteUsername = "_valera_"
-	etcDefaultPath       = "/etc/vgdept"
+	dbnameFilename        = "dbname"
+	schemaNameFilename    = "schema"
+	sshkeyED25519Filename = "id_ed25519"
+	sshkeyRemoteUsername  = "_valera_"
+	etcDefaultPath        = "/etc/vgdept"
 )
 
 const (
@@ -38,27 +38,48 @@ const (
 	postgresqlSocket     = "/var/run/postgresql"
 )
 
-const sshTimeOut = time.Duration(5 * time.Second)
+const (
+	sshSHA256Prefix = "SHA256:"
+	sshTimeOut      = time.Duration(5 * time.Second)
+	maxSSHAuthLen   = 1024 * 4
+)
 
 const maxCollisionAttemts = 1000
 
 const (
-	sqlPickRealm = `
-	SELECT realm_id, control_ip FROM %s LIMIT 1
+	sqlCheckToken = `
+	SELECT
+		t.token
+	FROM
+		%s AS t
+		JOIN %s AS p ON p.partner_id=t.partner_id
+	WHERE
+		p.is_active=true
+		AND t.token=$1
+	LIMIT 1
 	`
+
 	sqlCreateBrigadier = `
 	INSERT INTO
 		%s
 		(
 			brigade_id,
-			realm_id,
 			brigadier,
-			person
+			person,
+			realm_id,
+			partner_id
 		)
-	VALUES
-		(
-			$1, $2, $3, $4
-		)
+			SELECT 
+				$1, $2, $3,
+				pr.realm_id, pr.partner_id 
+			FROM 
+				%s AS t 					-- partners_tokens
+				JOIN  %s AS p ON p.partner_id=t.partner_id      -- partners
+				JOIN %s AS pr ON pr.partner_id=p.partner_id     -- partners_realms
+			WHERE
+				p.is_active=true
+				AND t.token=$4
+			ORDER BY RANDOM() LIMIT 1
 	`
 	sqlCreateBrigadierSalt = `
 	INSERT INTO
@@ -86,6 +107,24 @@ const (
 		)
 	`
 
+	sqlCreateBrigadeEvent = `
+	INSERT INTO
+		%s
+		(
+			brigade_id,
+			event_name,
+			event_info,
+			event_time
+		)
+	VALUES
+		(
+			$1,
+			'create_brigade',
+			$2,
+			NOW() AT TIME ZONE 'UTC'
+		)
+	`
+
 	sqlFetchBrigadier = `
 	SELECT
 		brigadiers.brigadier,
@@ -100,11 +139,29 @@ const (
 	`
 )
 
+var (
+	errEmptyAccessToken = errors.New("token not specified")
+	errAccessDenied     = errors.New("access denied")
+)
+
+const brigadeCreationType = "ssh_api"
+
 const defaultSeedExtra = "даблять"
 
-var errEmptyAccessToken = errors.New("token not specified")
-
 var seedExtra string // extra data for seed
+
+var LogTag = setLogTag()
+
+const defaultLogTag = "addbrigade"
+
+func setLogTag() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return defaultLogTag
+	}
+
+	return filepath.Base(executable)
+}
 
 func init() {
 	seedExtra = os.Getenv("SEED_EXTRA")
@@ -116,40 +173,42 @@ func init() {
 func main() {
 	var w io.WriteCloser
 
+	// fmt.Printf("token: %s\n", token)
+
 	confDir := os.Getenv("CONFDIR")
 	if confDir == "" {
 		confDir = etcDefaultPath
 	}
 
-	chunked, _, err := parseArgs()
+	chunked, token, err := parseArgs()
 	if err != nil {
-		log.Fatalf("Can't parse args: %s\n", err)
+		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
 
 	dbname, schema, err := readConfigs(confDir)
 	if err != nil {
-		log.Fatalf("Can't read configs: %s\n", err)
+		log.Fatalf("%s: Can't read configs: %s\n", LogTag, err)
 	}
 
 	sshconf, err := createSSHConfig(confDir)
 	if err != nil {
-		log.Fatalf("Can't create ssh configs: %s\n", err)
+		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
 
 	db, err := createDBPool(dbname)
 	if err != nil {
-		log.Fatalf("Can't create db pool: %s\n", err)
+		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
 
-	id, mnemo, err := createBrigade(db, schema)
+	id, mnemo, err := createBrigade(db, schema, token, brigadeCreationType)
 	if err != nil {
-		log.Fatalf("Can't create brigade: %s\n", err)
+		log.Fatalf("%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
 	// wgconfx = wgconf + keydesk IP
 	wgconfx, fullname, person, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
 	if err != nil {
-		log.Fatalf("Can't request brigade: %s\n", err)
+		log.Fatalf("%s: Can't request brigade: %s\n", LogTag, err)
 	}
 
 	switch chunked {
@@ -162,28 +221,28 @@ func main() {
 
 	_, err = fmt.Fprintln(w, fullname)
 	if err != nil {
-		log.Fatalf("Can't print fullname: %s\n", err)
+		log.Fatalf("%s: Can't print fullname: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, person)
 	if err != nil {
-		log.Fatalf("Can't print person: %s\n", err)
+		log.Fatalf("%s: Can't print person: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, desc64)
 	if err != nil {
-		log.Fatalf("Can't print desc: %s\n", err)
+		log.Fatalf("%s: Can't print desc: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, url64)
 	if err != nil {
-		log.Fatalf("Can't print url: %s\n", err)
+		log.Fatalf("%s: Can't print url: %s\n", LogTag, err)
 	}
 	_, err = fmt.Fprintln(w, mnemo)
 	if err != nil {
-		log.Fatalf("Can't print memo: %s\n", err)
+		log.Fatalf("%s: Can't print memo: %s\n", LogTag, err)
 	}
 
 	_, err = w.Write(wgconfx)
 	if err != nil {
-		log.Fatalf("Can't print wgconfx: %s\n", err)
+		log.Fatalf("%s: Can't print wgconfx: %s\n", LogTag, err)
 	}
 }
 
@@ -236,7 +295,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		url64,
 	)
 
-	fmt.Fprintf(os.Stderr, "%s#%s:22 -> %s\n", sshkeyRemoteUsername, control_ip, cmd)
+	fmt.Fprintf(os.Stderr, "%s: %s#%s:22 -> %s\n", LogTag, sshkeyRemoteUsername, control_ip, cmd)
 
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", control_ip), sshconf)
 	if err != nil {
@@ -256,14 +315,18 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	session.Stderr = &e
 
 	if err := session.Run(cmd); err != nil {
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, e.String())
 
 		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
 	}
 
+	if errstr := e.String(); errstr != "" {
+		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
+	}
+
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "readed data:\n%s\n", wgconfx)
+		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
 
 		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
 	}
@@ -271,7 +334,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	return wgconfx, fullname, person.Name, desc64, url64, nil
 }
 
-func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
+func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo string) (uuid.UUID, string, error) {
 	id := uuid.New()
 
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
@@ -286,16 +349,16 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 		return id, "", fmt.Errorf("begin: %w", err)
 	}
 
-	var (
-		realm_id   string
-		control_ip netip.Addr
-	)
-
-	err = tx.QueryRow(ctx, fmt.Sprintf(sqlPickRealm, (pgx.Identifier{schema, "realms"}.Sanitize()))).Scan(&realm_id, &control_ip)
+	t := make([]byte, 32) // just to check if token exists.
+	err = tx.QueryRow(ctx, fmt.Sprintf(sqlCheckToken,
+		pgx.Identifier{schema, "partners_tokens"}.Sanitize(),
+		pgx.Identifier{schema, "partners"}.Sanitize()),
+		token,
+	).Scan(&t)
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return id, "", fmt.Errorf("pair query: %w", err)
+		return id, "", errAccessDenied
 	}
 
 	bcnt := 0
@@ -315,11 +378,17 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 		}
 
 		_, err = ntx.Exec(ctx,
-			fmt.Sprintf(sqlCreateBrigadier, (pgx.Identifier{schema, "brigadiers"}.Sanitize())),
+			fmt.Sprintf(
+				sqlCreateBrigadier,
+				pgx.Identifier{schema, "brigadiers"}.Sanitize(),
+				pgx.Identifier{schema, "partners_tokens"}.Sanitize(),
+				pgx.Identifier{schema, "partners"}.Sanitize(),
+				pgx.Identifier{schema, "partners_realms"}.Sanitize(),
+			),
 			id,
-			realm_id,
 			fullname,
 			person,
+			token,
 		)
 
 		if err == nil {
@@ -379,6 +448,17 @@ func createBrigade(db *pgxpool.Pool, schema string) (uuid.UUID, string, error) {
 		return id, "", fmt.Errorf("create brigadier key: %w", err)
 	}
 
+	_, err = tx.Exec(ctx,
+		fmt.Sprintf(sqlCreateBrigadeEvent, (pgx.Identifier{schema, "brigades_actions"}.Sanitize())),
+		id,
+		creationInfo,
+	)
+	if err != nil {
+		tx.Rollback(ctx)
+
+		return id, "", fmt.Errorf("create brigade event: %w", err)
+	}
+
 	err = tx.Commit(ctx)
 	if err != nil {
 		return id, "", fmt.Errorf("commit: %w", err)
@@ -428,7 +508,7 @@ func readConfigs(path string) (string, string, error) {
 func createSSHConfig(path string) (*ssh.ClientConfig, error) {
 	// var hostKey ssh.PublicKey
 
-	key, err := os.ReadFile(filepath.Join(path, sshkeyFilename))
+	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
 	if err != nil {
 		return nil, fmt.Errorf("read private key: %w", err)
 	}
@@ -461,8 +541,8 @@ func parseArgs() (bool, []byte, error) {
 		return false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
 	}
 
-	token := make([]byte, base64.StdEncoding.WithPadding(base64.StdPadding).DecodedLen(len(a[0])))
-	_, err := base64.StdEncoding.WithPadding(base64.StdPadding).Decode(token, []byte(a[0]))
+	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
+	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
 		return false, nil, fmt.Errorf("access token: %w", err)
 	}

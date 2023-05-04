@@ -281,10 +281,6 @@ func queryActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) 
 		updateTime time.Time
 	)
 
-	if rows.CommandTag().RowsAffected() == 0 {
-		return updates, nil
-	}
-
 	_, err = pgx.ForEachRow(
 		rows,
 		[]any{
@@ -361,10 +357,6 @@ func queryPartnersUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time)
 		updateTime  time.Time
 	)
 
-	if rows.CommandTag().RowsAffected() == 0 {
-		return updates, nil
-	}
-
 	_, err = pgx.ForEachRow(
 		rows,
 		[]any{
@@ -435,10 +427,6 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 		realmID    string
 		updateTime time.Time
 	)
-
-	if rows.CommandTag().RowsAffected() == 0 {
-		return updates, nil
-	}
 
 	_, err = pgx.ForEachRow(
 		rows,
@@ -511,10 +499,6 @@ func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]I
 		partnerID  string
 		updateTime time.Time
 	)
-
-	if rows.CommandTag().RowsAffected() == 0 {
-		return updates, nil
-	}
 
 	_, err = pgx.ForEachRow(
 		rows,

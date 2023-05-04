@@ -8,7 +8,8 @@ CREATE TABLE :"schema_name".partners (
     partner_id          uuid PRIMARY KEY NOT NULL,
     partner             text UNIQUE NOT NULL,
     created_at          timestamp without time zone DEFAULT now(),
-    is_active           bool NOT NULL
+    is_active           bool NOT NULL,
+    update_time         timestamp without time zone NOT NULL DEFAULT now()
 );
 
 CREATE TABLE :"schema_name".partners_tokens (

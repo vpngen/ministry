@@ -331,7 +331,7 @@ VALUES
 `
 	_, err = tx.Exec(ctx,
 		fmt.Sprintf(sqlRestoreEventAdd,
-			(pgx.Identifier{schema, "brigade_actions"}.Sanitize()),
+			(pgx.Identifier{schema, "brigades_actions"}.Sanitize()),
 		),
 		id,
 	)

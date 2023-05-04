@@ -6,7 +6,8 @@ CREATE SCHEMA :"schema_name";
 CREATE TABLE :"schema_name".realms (
     realm_id            uuid PRIMARY KEY NOT NULL,
     control_ip          inet UNIQUE NOT NULL,
-    is_active           bool NOT NULL
+    is_active           bool NOT NULL,
+    update_time         timestamp without time zone NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE :"schema_name".brigadiers (

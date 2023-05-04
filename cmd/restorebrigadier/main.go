@@ -325,7 +325,7 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 	sqlRestoreEventAdd := `
 INSERT INTO 
 	%s 
-	(brigade_id, event_type, event_time, event_info) 
+	(brigade_id, event_name, event_time, event_info) 
 VALUES 
 	($1, 'restore_brigade', NOW(), 'ssh_api')
 `

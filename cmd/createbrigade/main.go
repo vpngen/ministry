@@ -26,11 +26,11 @@ import (
 )
 
 const (
-	dbnameFilename       = "dbname"
-	schemaNameFilename   = "schema"
-	sshkeyFilename       = "id_ecdsa"
-	sshkeyRemoteUsername = "_valera_"
-	etcDefaultPath       = "/etc/vgdept"
+	dbnameFilename        = "dbname"
+	schemaNameFilename    = "schema"
+	sshkeyED25519Filename = "id_ed25519"
+	sshkeyRemoteUsername  = "_valera_"
+	etcDefaultPath        = "/etc/vgdept"
 )
 
 const (
@@ -107,6 +107,24 @@ const (
 		)
 	`
 
+	sqlCreateBrigadeEvent = `
+	INSERT INTO
+		%s
+		(
+			brigade_id,
+			event_name,
+			event_description,
+			event_time
+		)
+	VALUES
+		(
+			$1,
+			'create_brigade',
+			$2,
+			NOW() AT TIME ZONE 'UTC'
+		)
+	`
+
 	sqlFetchBrigadier = `
 	SELECT
 		brigadiers.brigadier,
@@ -125,6 +143,8 @@ var (
 	errEmptyAccessToken = errors.New("token not specified")
 	errAccessDenied     = errors.New("access denied")
 )
+
+const brigadeCreationType = "ssh_api"
 
 const defaultSeedExtra = "даблять"
 
@@ -180,7 +200,7 @@ func main() {
 		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
 
-	id, mnemo, err := createBrigade(db, schema, token)
+	id, mnemo, err := createBrigade(db, schema, token, brigadeCreationType)
 	if err != nil {
 		log.Fatalf("%s: Can't create brigade: %s\n", LogTag, err)
 	}
@@ -314,7 +334,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	return wgconfx, fullname, person.Name, desc64, url64, nil
 }
 
-func createBrigade(db *pgxpool.Pool, schema string, token []byte) (uuid.UUID, string, error) {
+func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo string) (uuid.UUID, string, error) {
 	id := uuid.New()
 
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
@@ -428,6 +448,17 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte) (uuid.UUID, st
 		return id, "", fmt.Errorf("create brigadier key: %w", err)
 	}
 
+	_, err = tx.Exec(ctx,
+		fmt.Sprintf(sqlCreateBrigadeEvent, (pgx.Identifier{schema, "brigades_events"}.Sanitize())),
+		id,
+		creationInfo,
+	)
+	if err != nil {
+		tx.Rollback(ctx)
+
+		return id, "", fmt.Errorf("create brigade event: %w", err)
+	}
+
 	err = tx.Commit(ctx)
 	if err != nil {
 		return id, "", fmt.Errorf("commit: %w", err)
@@ -477,7 +508,7 @@ func readConfigs(path string) (string, string, error) {
 func createSSHConfig(path string) (*ssh.ClientConfig, error) {
 	// var hostKey ssh.PublicKey
 
-	key, err := os.ReadFile(filepath.Join(path, sshkeyFilename))
+	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
 	if err != nil {
 		return nil, fmt.Errorf("read private key: %w", err)
 	}

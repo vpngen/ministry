@@ -5,12 +5,13 @@ DBNAME=${DBNAME:-$(cat "${ETCDIR}"/dbname)}
 SCHEMA=${SCHEMA:-$(cat "${ETCDIR}"/schema)}
 USERNAME="_valera_"
 REALM="10.10.100.252"
-REASON="never_visited"
+REASON="inactive"
 
 DAYS=${DAYS:-"1"}
-NUMS=${NUMS:-"10"}
+NUMS=${NUMS:-"1000"}
+MIN_USERS=${MIN_USER:-"5"}
 
-cmd="getwasted -d ${DAYS} -n ${NUMS}"
+cmd="getwasted inactive -m ${DAYS} -n ${NUMS}"
 echo "${cmd}"
 wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile=${ETCDIR}/id_ed25519 -o StrictHostKeyChecking=no ${USERNAME}@${REALM} ${cmd})
 rc=$?
@@ -20,6 +21,8 @@ if [ $rc -ne 0 ]; then
 fi
 
 for bid in ${wasted}; do
+        echo "delete ${bid}"
+
         c="psql -d ${DBNAME} -q -v ON_ERROR_STOP=yes -t -A --set brigade_id=${bid} --set reason=${REASON}"
         echo "${c}"
 

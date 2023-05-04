@@ -38,9 +38,9 @@ const (
 )
 
 const (
-	sshkeyFilename       = "id_ecdsa"
-	sshkeyRemoteUsername = "_valera_"
-	sshTimeOut           = time.Duration(5 * time.Second)
+	sshkeyED25519Filename = "id_ed25519"
+	sshkeyRemoteUsername  = "_valera_"
+	sshTimeOut            = time.Duration(5 * time.Second)
 )
 
 const nullTime = -62135596800
@@ -400,7 +400,7 @@ func parseArgs() (string, string, bool, bool, error) {
 func createSSHConfig(path string) (*ssh.ClientConfig, error) {
 	// var hostKey ssh.PublicKey
 
-	key, err := os.ReadFile(filepath.Join(path, sshkeyFilename))
+	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
 	if err != nil {
 		return nil, fmt.Errorf("read private key: %w", err)
 	}

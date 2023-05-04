@@ -24,9 +24,9 @@ const (
 )
 
 const (
-	sshkeyFilename       = "id_ecdsa"
-	sshkeyRemoteUsername = "vgstats"
-	etcDefaultPath       = "/etc/vgdept"
+	sshkeyED25519Filename = "id_ed25519"
+	sshkeyRemoteUsername  = "vgstats"
+	etcDefaultPath        = "/etc/vgdept"
 )
 
 const (
@@ -297,7 +297,7 @@ func fetchLastUpdate(sshConfig *ssh.ClientConfig, addr string) (time.Time, error
 func createSSHConfig(path string) (*ssh.ClientConfig, error) {
 	// var hostKey ssh.PublicKey
 
-	key, err := os.ReadFile(filepath.Join(path, sshkeyFilename))
+	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
 	if err != nil {
 		return nil, fmt.Errorf("read private key: %w", err)
 	}

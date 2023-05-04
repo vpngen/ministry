@@ -175,6 +175,8 @@ func main() {
 		}
 
 		fmt.Println(string(buf))
+
+		return
 	}
 
 	if err := applyUpdates(sshConfig, addr, pack); err != nil {

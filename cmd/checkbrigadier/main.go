@@ -40,7 +40,7 @@ const (
 const (
 	sshkeyED25519Filename = "id_ed25519"
 	sshkeyRemoteUsername  = "_valera_"
-	sshTimeOut            = time.Duration(5 * time.Second)
+	sshTimeOut            = time.Duration(80 * time.Second)
 )
 
 const nullTime = -62135596800
@@ -69,6 +69,19 @@ func init() {
 	if seedExtra == "" {
 		seedExtra = defaultSeedExtra
 	}
+}
+
+var LogTag = setLogTag()
+
+const defaultLogTag = "checkbrigadier"
+
+func setLogTag() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return defaultLogTag
+	}
+
+	return filepath.Base(executable)
 }
 
 func main() {
@@ -213,16 +226,26 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 	session.Stdout = &b
 	session.Stderr = &e
 
-	if err := session.Run(cmd); err != nil {
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
+	defer func() {
+		fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
 
+		switch errstr := e.String(); errstr {
+		case "":
+			fmt.Fprintln(os.Stderr, " empty")
+		default:
+			fmt.Fprintln(os.Stderr)
+			for _, line := range strings.Split(errstr, "\n") {
+				fmt.Fprintf(os.Stderr, "%s:    | %s\n", LogTag, line)
+			}
+		}
+	}()
+
+	if err := session.Run(cmd); err != nil {
 		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "readed data:\n%s\n", wgconfx)
-
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
 

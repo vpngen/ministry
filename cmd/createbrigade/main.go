@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ const (
 
 const (
 	sshSHA256Prefix = "SHA256:"
-	sshTimeOut      = time.Duration(5 * time.Second)
+	sshTimeOut      = time.Duration(80 * time.Second)
 	maxSSHAuthLen   = 1024 * 4
 )
 
@@ -152,7 +153,7 @@ var seedExtra string // extra data for seed
 
 var LogTag = setLogTag()
 
-const defaultLogTag = "addbrigade"
+const defaultLogTag = "createbrigade"
 
 func setLogTag() string {
 	executable, err := os.Executable()
@@ -314,20 +315,26 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	session.Stdout = &b
 	session.Stderr = &e
 
+	defer func() {
+		fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
+
+		switch errstr := e.String(); errstr {
+		case "":
+			fmt.Fprintln(os.Stderr, " empty")
+		default:
+			fmt.Fprintln(os.Stderr)
+			for _, line := range strings.Split(errstr, "\n") {
+				fmt.Fprintf(os.Stderr, "%s:    | %s\n", LogTag, line)
+			}
+		}
+	}()
+
 	if err := session.Run(cmd); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, e.String())
-
 		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
-	}
-
-	if errstr := e.String(); errstr != "" {
-		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
 	}
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
-
 		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
 	}
 

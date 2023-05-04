@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -89,6 +90,19 @@ type UpdatesPack struct {
 	ActionsUpdates  []ActionsUpdate  `json:"updates_actions"`
 	UpdatesFrom     UpdateTimeResult `json:"updates_from"`
 	UpdateTime      time.Time        `json:"update_time"`
+}
+
+var LogTag = setLogTag()
+
+const defaultLogTag = "syncstats"
+
+func setLogTag() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return defaultLogTag
+	}
+
+	return filepath.Base(executable)
 }
 
 func main() {
@@ -204,33 +218,35 @@ func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *UpdatesPack
 	session.Stdout = &b
 	session.Stderr = &e
 
+	defer func() {
+		fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
+
+		switch errstr := e.String(); errstr {
+		case "":
+			fmt.Fprintln(os.Stderr, " empty")
+		default:
+			fmt.Fprintln(os.Stderr)
+			for _, line := range strings.Split(errstr, "\n") {
+				fmt.Fprintf(os.Stderr, "%s:    | %s\n", LogTag, line)
+			}
+		}
+	}()
+
 	stdin, err := session.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
 	if err := session.Start("/home/vgstats/syncids -ch sync"); err != nil {
-		fmt.Fprintf(os.Stderr, "start:\n%s\n", err)
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
-
 		return fmt.Errorf("start: %w", err)
 	}
 
 	if err := json.NewEncoder(httputil.NewChunkedWriter(stdin)).Encode(updates); err != nil {
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
-
 		return fmt.Errorf("encode: %w", err)
 	}
 
 	if err := session.Wait(); err != nil {
-		fmt.Fprintf(os.Stderr, "wait:\n%s\n", err)
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
-
 		return fmt.Errorf("wait: %w", err)
-	}
-
-	if e.String() != "" {
-		fmt.Fprintf(os.Stderr, "<<<<<\n%s\n>>>>>\n", e.String())
 	}
 
 	return nil

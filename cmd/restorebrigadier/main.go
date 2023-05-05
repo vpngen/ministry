@@ -200,15 +200,13 @@ func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig
 	session.Stderr = &e
 
 	defer func() {
-		fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
-
 		switch errstr := e.String(); errstr {
 		case "":
-			fmt.Fprintln(os.Stderr, " empty")
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr: empty\n", LogTag)
 		default:
-			fmt.Fprintln(os.Stderr)
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
 			for _, line := range strings.Split(errstr, "\n") {
-				fmt.Fprintf(os.Stderr, "%s:    | %s\n", LogTag, line)
+				fmt.Fprintf(os.Stderr, "%s: | %s\n", LogTag, line)
 			}
 		}
 	}()
@@ -293,21 +291,25 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 	session.Stdout = &b
 	session.Stderr = &e
 
-	if err := session.Run(cmd); err != nil {
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
+	defer func() {
+		switch errstr := e.String(); errstr {
+		case "":
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr: empty\n", LogTag)
+		default:
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
+			for _, line := range strings.Split(errstr, "\n") {
+				fmt.Fprintf(os.Stderr, "%s: | %s\n", LogTag, line)
+			}
+		}
+	}()
 
+	if err := session.Run(cmd); err != nil {
 		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 
 	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, e.String())
-
 		return nil, fmt.Errorf("chunk read: %w", err)
-	}
-
-	if errstr := e.String(); errstr != "" {
-		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
 	}
 
 	tx, err = db.Begin(ctx)

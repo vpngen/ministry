@@ -151,7 +151,7 @@ func main() {
 
 	log.Println(realms)
 
-	partners, err := syncPanters(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimePartners)
+	partners, err := syncPartners(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimePartners)
 	if err != nil {
 		log.Fatalf("Sync partners: %s", err)
 	}
@@ -328,7 +328,7 @@ func queryActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) 
 	return updates, nil
 }
 
-func syncPanters(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
+func syncPartners(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst partners updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryPartnersUpdates(dbPool, schema, lastUpdate)
@@ -385,7 +385,7 @@ func queryPartnersUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time)
 				updates,
 				PartnersUpdate{
 					PartnerID:   partnerID,
-					PartnerName: partnerID,
+					PartnerName: partnerName,
 					UpdateTime:  updateTime,
 				},
 			)

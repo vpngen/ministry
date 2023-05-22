@@ -32,7 +32,7 @@ printdef () {
         exit 1
 }
 
-addrealm () {
+add_dc () {
         realm_id="$1"
         realm_name="$2"
         control_ip="$3"
@@ -53,7 +53,7 @@ EOF
         echo "Realm ${realm_id} added."
 }
 
-inforealm () {
+info_dc () {
         realm_id="$1"
         if [ -z "${realm_id}" ]; then
                 printdef
@@ -69,7 +69,7 @@ COMMIT;
 EOF
 }
 
-listrealms () {
+list_dc () {
         psql -qt -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" <<EOF
@@ -79,7 +79,7 @@ COMMIT;
 EOF
 }
 
-activate () {
+activate_dc () {
         realm_id="$1"
         if [ -z "${realm_id}" ]; then
                 printdef
@@ -117,7 +117,7 @@ EOF
         echo "Realm ${realm_id} activated"
 }
 
-deactivate () {
+deactivate_dc () {
         realm_id="$1"
         if [ -z "${realm_id}" ]; then
                 printdef
@@ -144,19 +144,19 @@ fi
 
 case "$opt" in
         add)
-                addrealm "$@"
+                add_dc "$@"
                 ;;
         activate)
-                activatedc "$@"
+                activate_dc "$@"
                 ;;
         deactivate)
-                deactivatedc "$@"
+                deactivate_dc "$@"
                 ;;
         info)
-                inforealm "$@"
+                info_dc "$@"
                 ;;
         list)
-                listrealms "$@"
+                list_dc "$@"
                 ;;
         *)
                 printdef

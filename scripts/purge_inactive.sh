@@ -53,14 +53,17 @@ EOF
 }
 
 realms=$(psql -d "${DBNAME}" \
-        -q -t -A \
+        -q -t -A --csv \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" << EOF
-        SELECT realm_id FROM :"schema_name".realms WHERE is_active = true;
+        SELECT realm_id,control_ip FROM :"schema_name".realms WHERE is_active = true;
 EOF
 )
 
 for realm in ${realms}; do
-        echo "[+]     Realm: ${realm}"
-        purge_per_realm "${realm}"
+        realm_id=$(echo "${realm}" | cut -d ',' -f 1)
+        control_ip=$(echo "${realm}" | cut -d ',' -f 2)
+
+        echo "[+]     Realm: ${realm_id} control_ip: ${control_ip}"
+        purge_per_realm "${control_ip}"
 done

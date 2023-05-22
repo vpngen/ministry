@@ -14,7 +14,7 @@ echo "GET WASTED: ${CMD}"
 
 purge_per_realm () {
         REALM="${1}"
-        if [ -z "${REALM}" ] || [ -z "${CONTROL_IP}" ]; then
+        if [ -z "${REALM}" ]; then
                 echo "[!]         Realm is empty"
                 exit 1
         fi

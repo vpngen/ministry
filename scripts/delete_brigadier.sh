@@ -19,7 +19,7 @@ REALM=$(psql -d "${DBNAME}" -q -t -A \
         --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
         SELECT 
-                r.realm_id 
+                r.control_ip 
         FROM
                 :"schema_name".brigadiers b
                 JOIN :"schema_name".realms r ON b.realm_id = r.realm_id

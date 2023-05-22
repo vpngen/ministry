@@ -86,25 +86,25 @@ activate_dc () {
                 printdef
         fi
 
-        realm_name=$(psql -qt -d "${DBNAME}" \
+        control_ip=$(psql -qt -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF
 BEGIN;
-        SELECT realm_name FROM :"schema_name".realms WHERE realm_id=:'realm_id';
+        SELECT control_ip FROM :"schema_name".realms WHERE realm_id=:'realm_id';
 COMMIT;
 EOF
 )
 
-        if [ -z "${realm_name}" ]; then
-                echo "Error: realm ${realm_id} not found"
+        if [ -z "${control_ip}" ]; then
+                echo "Error: realm ${control_ip} not found"
                 exit 1
         fi
 
-        echo "Realm name: ${realm_name}"
+        echo "Realm control_ip: ${control_ip}"
 
         cmd="cat > ${REMOTE_REALMNAME_FILE}"
-        echo -n "${realm_id},${realm_name}" | ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${cmd}"
+        echo -n "${realm_id},${realm_name}" | ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${cmd}"
 
         psql -qt -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \

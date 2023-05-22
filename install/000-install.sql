@@ -5,8 +5,10 @@ CREATE SCHEMA :"schema_name";
 -- Realms.
 CREATE TABLE :"schema_name".realms (
     realm_id            uuid PRIMARY KEY NOT NULL,
+    realm_name          text UNIQUE NOT NULL,
     control_ip          inet UNIQUE NOT NULL,
     is_active           bool NOT NULL,
+    free_slots          int NOT NULL DEFAULT 0,
     update_time         timestamp without time zone NOT NULL DEFAULT NOW()
 );
 

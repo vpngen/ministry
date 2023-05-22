@@ -1,6 +1,5 @@
 #!/bin/sh
 
-ETCDIR="/etc/vgdept"
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"library"}
 
@@ -26,12 +25,11 @@ COMMIT;
 EOF
 )
 
-for line in "${list}"; do
+for line in ${list}; do
         echo "${line}" | tee -a "${DELETEDLIST}"
 done
 
-
-dels=$(psql -d "${DBNAME}" -t -A \
+psql -d "${DBNAME}" -t -A \
         --set interval="${INTERVAL}" <<EOF
 BEGIN;
 
@@ -56,6 +54,6 @@ END\$purge\$;
 
 COMMIT;
 EOF
-)
+
 
 

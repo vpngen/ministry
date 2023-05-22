@@ -423,7 +423,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 
 	defer tx.Rollback(ctx)
 
-	sqlGetRealms := `SELECT realm_id,update_time FROM %s WHERE update_time >= $1`
+	sqlGetRealms := `SELECT realm_id,realm_name,update_time FROM %s WHERE update_time >= $1`
 	rows, err := tx.Query(
 		ctx,
 		fmt.Sprintf(
@@ -441,6 +441,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 	var (
 		updates    = []RealmsUpdate{}
 		realmID    string
+		realmName  string
 		updateTime time.Time
 	)
 
@@ -448,6 +449,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 		rows,
 		[]any{
 			&realmID,
+			&realmName,
 			&updateTime,
 		},
 		func() error {
@@ -455,7 +457,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 				updates,
 				RealmsUpdate{
 					RealmID:    realmID,
-					RealmName:  realmID,
+					RealmName:  realmName,
 					UpdateTime: updateTime,
 				},
 			)

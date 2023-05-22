@@ -7,6 +7,7 @@ REMOTE_REALMNAME_FILE=${REMOTE_REALMNAME_FILE:-"/etc/vg-dc-mgmt/dc-name.txt"} # 
 CONFDIR=${CONFDIR:-"/etc/vgdept"}
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"library"}
+USERNAME=${USERNAME:-"_valera_"}
 
 echo "CONFDIR: ${CONFDIR}"
 echo "DBNAME: ${DBNAME}"

@@ -86,7 +86,7 @@ activate_dc () {
                 printdef
         fi
 
-        control_ip=$(psql -qt -d "${DBNAME}" \
+        control_ip=$(psql -qtA -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF

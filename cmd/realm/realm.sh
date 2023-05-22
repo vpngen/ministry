@@ -2,8 +2,6 @@
 
 set -e
 
-SSHKEY=${SSHKEY:-"/etc/vgdept/id_ed25519"}
-REMOTE_REALMNAME_FILE=${REMOTE_REALMNAME_FILE:-"/etc/vg-dc-mgmt/dc-name.txt"} # "realm_id,realm_name"
 CONFDIR=${CONFDIR:-"/etc/vgdept"}
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"library"}
@@ -85,26 +83,6 @@ activate_dc () {
         if [ -z "${realm_id}" ]; then
                 printdef
         fi
-
-        control_ip=$(psql -qtA -d "${DBNAME}" \
-        --set ON_ERROR_STOP=yes \
-        --set schema_name="${SCHEMA}" \
-        --set realm_id="${realm_id}" <<EOF
-BEGIN;
-        SELECT control_ip FROM :"schema_name".realms WHERE realm_id=:'realm_id';
-COMMIT;
-EOF
-)
-
-        if [ -z "${control_ip}" ]; then
-                echo "Error: realm ${control_ip} not found"
-                exit 1
-        fi
-
-        echo "Realm control_ip: ${control_ip}"
-
-        cmd="cat > ${REMOTE_REALMNAME_FILE}"
-        echo -n "${realm_id},${realm_name}" | ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${cmd}"
 
         psql -qt -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \

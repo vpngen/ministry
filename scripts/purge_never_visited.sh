@@ -57,7 +57,10 @@ EOF
         # !!! fetch free slots
 }
 
-realms=$(psql -d "${DBNAME}" -q -v ON_ERROR_STOP=yes -t -A << EOF
+realms=$(psql -d "${DBNAME}" \
+        -q -t -A \
+        --set ON_ERROR_STOP=yes \
+        --set schema_name="${SCHEMA}" << EOF
         SELECT realm_id FROM :"schema_name".brigadiers WHERE is_active = true;
 EOF
 )

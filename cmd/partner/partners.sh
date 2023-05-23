@@ -80,7 +80,7 @@ infopartner () {
 BEGIN;
         SELECT 'Partner :' AS head, * FROM :"schema_name".partners WHERE partner_id=:'partner_id';
         SELECT CONCAT('    token: ',translate(encode(token, 'base64'),'+/=','-_'), ':', name) FROM :"schema_name".partners_tokens WHERE partner_id=:'partner_id';
-        SELECT CONCAT('    realm: ',realm_id, realm_name, is_active, free_slots) FROM :"schema_name".partners_realms WHERE partner_id=:'partner_id';
+        SELECT CONCAT('    realm: ', r.realm_id, r.realm_name, r.is_active, r.free_slots) FROM :"schema_name".partners_realms pr JOIN :"schema_name".realms r ON pr.realm_id=r.realm_id WHERE partner_id=:'partner_id';
 COMMIT;
 EOF
 }

@@ -30,12 +30,20 @@ addkey () {
         token="$2"
         token_name="$3"
 
+        if [ -z "${partner_id}" ] || [ -z "${token}" ] || [ -z "${token_name}" ]; then
+                echo "Error: partner_id, token and token_name must be set ($*)" >&2
+
+                printdef
+        fi
+
         # shellcheck disable=SC3037
         token=$(echo -n "${token}" | basenc -d --base64url | basenc --base64 -w 0)
 
         echo "token: ${token} name: ${token_name}     partner_id: ${partner_id}"
 
         if [ -z "${partner_id}" ] || [ -z "${token}" ] || [ -z "${token_name}" ]; then
+                echo "Error: partner_id, token and token_name must be set ($*)" >&2
+
                 printdef
         fi
 
@@ -63,6 +71,8 @@ delkey () {
         partner_id="$1"
         token_name="$2"
         if [ -z "${partner_id}" ] || [ -z "${token}" ]; then
+                echo "Error: partner_id and token_name must be set ($*)" >&2
+
                 printdef
         fi
 
@@ -102,6 +112,8 @@ EOF
 
 opt="$1";
 if [ -z "${opt}" ]; then
+        echo "Error: no command specified" >&2
+
         printdef
 fi
 
@@ -124,6 +136,3 @@ case "$opt" in
                 printdef
                 ;;
 esac
-
-
-

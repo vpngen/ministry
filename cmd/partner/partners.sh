@@ -37,6 +37,8 @@ addpartner () {
         partner_desc="$2"
 
         if [ -z "${partner_id}" ] || [ -z "${partner_desc}" ]; then
+                echo "Error: partner_id and description must be set ($*)" >&2
+
                 printdef
         fi
 
@@ -66,6 +68,8 @@ EOF
 infopartner () {
         partner_id="$1"
         if [ -z "${partner_id}" ]; then
+                echo "Error: partner_id must be set" >&2
+
                 printdef
         fi
 
@@ -84,6 +88,8 @@ EOF
 activate () {
         partner_id="$1"
         if [ -z "${partner_id}" ]; then
+                echo "Error: partner_id must be set" >&2
+
                 printdef
         fi
 
@@ -102,6 +108,8 @@ EOF
 deactivate () {
         partner_id="$1"
         if [ -z "${partner_id}" ]; then
+                echo "Error: partner_id must be set" >&2
+
                 printdef
         fi
 
@@ -121,6 +129,8 @@ attachdc () {
         partner_id="$1"
         realm_id="$2"
         if [ -z "${partner_id}" ] || [ -z "${realm_id}" ]; then
+                echo "Error: partner_id and realm_id must be set ($*)" >&2
+
                 printdef
         fi
 
@@ -139,6 +149,8 @@ detachdc () {
         partner_id="$1"
         realm_id="$2"
         if [ -z "${partner_id}" ] || [ -z "${realm_id}" ]; then
+                echo "Error: partner_id and realm_id must be set ($*)" >&2
+
                 printdef
         fi
 
@@ -155,6 +167,8 @@ EOF
 
 opt="$1"
 if [ -z "${opt}" ]; then
+        echo "Error: command must be specified" >&2
+
         printdef
 fi
 
@@ -192,4 +206,3 @@ case "$opt" in
                 printdef
                 ;;
 esac
-

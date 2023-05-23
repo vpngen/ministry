@@ -35,7 +35,7 @@ add_dc () {
         realm_id="$1"
         realm_name="$2"
         control_ip="$3"
-        if [ -z "${realm_id}" ] || [ -z "${realm_name}" ] || [ "${control_ip}" ]; then
+        if [ -z "${realm_id}" ] || [ -z "${realm_name}" ] || [ -z "${control_ip}" ]; then
                 echo "Error: realm_id, realm_name and control_ip must be set ($*)" >&2
 
                 printdef
@@ -57,6 +57,8 @@ EOF
 info_dc () {
         realm_id="$1"
         if [ -z "${realm_id}" ]; then
+                echo "Error: realm_id must be set" >&2
+
                 printdef
         fi
 
@@ -83,6 +85,8 @@ EOF
 activate_dc () {
         realm_id="$1"
         if [ -z "${realm_id}" ]; then
+                echo "Error: realm_id must be set" >&2
+
                 printdef
         fi
 
@@ -101,6 +105,8 @@ EOF
 deactivate_dc () {
         realm_id="$1"
         if [ -z "${realm_id}" ]; then
+                echo "Error: realm_id must be set" >&2
+
                 printdef
         fi
 

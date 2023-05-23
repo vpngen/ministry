@@ -78,8 +78,11 @@ const (
 				%s AS t 					-- partners_tokens
 				JOIN  %s AS p ON p.partner_id=t.partner_id      -- partners
 				JOIN %s AS pr ON pr.partner_id=p.partner_id     -- partners_realms
+				JOIN %s AS r ON r.realm_id=pr.realm_id          -- realms
 			WHERE
 				p.is_active=true
+				AND r.is_active=true
+				AND r.free_slots>0
 				AND t.token=$4
 			ORDER BY RANDOM() LIMIT 1
 	`
@@ -420,6 +423,7 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo s
 				pgx.Identifier{schema, "partners_tokens"}.Sanitize(),
 				pgx.Identifier{schema, "partners"}.Sanitize(),
 				pgx.Identifier{schema, "partners_realms"}.Sanitize(),
+				pgx.Identifier{schema, "realms"}.Sanitize(),
 			),
 			id,
 			fullname,

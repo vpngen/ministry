@@ -36,6 +36,8 @@ add_dc () {
         realm_name="$2"
         control_ip="$3"
         if [ -z "${realm_id}" ] || [ -z "${realm_name}" ] || [ "${control_ip}" ]; then
+                echo "Error: realm_id, realm_name and control_ip must be set ($*)" >&2
+
                 printdef
         fi
 
@@ -116,6 +118,8 @@ EOF
 
 opt="$1"
 if [ -z "${opt}" ]; then
+        echo "Error: command not specified" >&2
+
         printdef
 fi
 

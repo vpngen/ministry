@@ -131,7 +131,7 @@ const (
 	SELECT
 		brigadiers.brigadier,
 		brigadiers.person,
-		realms.control_ip
+		realms.control_ip,
 		realms.realm_id
 	FROM
 		%s,%s

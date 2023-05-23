@@ -1,6 +1,6 @@
 #!/bin/sh
 
-SSHKEY=${SSHKEY:-"/etc/vgdept/id_ed25519"}
+SSH_KEY=${SSH_KEY:-"/etc/vgdept/id_ed25519"}
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"library"}
 USERNAME=${USERNAME:-"_valera_"}
@@ -15,7 +15,9 @@ get_realms_free_slot () {
                 exit 1
         fi
 
-        num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${CONTROL_IP}" "${CMD}")
+        CMD="get_free_slots -a"
+
+        num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no -T "${USERNAME}"@"${CONTROL_IP}" "${CMD}")
         rc=$?
         if [ $rc -ne 0 ]; then
                 echo "[-]         Something wrong: $rc"

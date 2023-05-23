@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base32"
@@ -131,6 +132,7 @@ const (
 		brigadiers.brigadier,
 		brigadiers.person,
 		realms.control_ip
+		realms.realm_id
 	FROM
 		%s,%s
 	WHERE
@@ -259,6 +261,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		fullname   string
 		person     namesgenerator.Person
 		control_ip netip.Addr
+		realm_id   uuid.UUID
 	)
 
 	err = tx.QueryRow(ctx,
@@ -271,6 +274,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		&fullname,
 		&person,
 		&control_ip,
+		&realm_id,
 	)
 	if err != nil {
 		tx.Rollback(ctx)
@@ -278,8 +282,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		return nil, "", "", "", "", fmt.Errorf("brigade query: %w", err)
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
 	}
 
@@ -331,10 +334,38 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
 	}
 
-	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
+	r := bufio.NewReader(httputil.NewChunkedReader(&b))
+
+	_, err = r.ReadString('\n')
+	if err != nil {
+		return nil, "", "", "", "", fmt.Errorf("num read: %w", err)
+	}
+
+	wgconfx, err := io.ReadAll(r)
 	if err != nil {
 		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
 	}
+
+	/*freeSlots, err := strconv.Atoi(strings.TrimSpace(num))
+	if err != nil {
+		return nil, "", "", "", "", fmt.Errorf("num parse: %w", err)
+	}
+
+	tx2, err := db.Begin(ctx)
+	if err != nil {
+		return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
+	}
+
+	sqlUpdateRealmFreeSlots := "UPDATE %s SET free_slots = $1 WHERE realm_id = $2"
+	if _, err := tx2.Exec(ctx, fmt.Sprintf(sqlUpdateRealmFreeSlots, pgx.Identifier{schema, "realms"}.Sanitize()), freeSlots, realm_id); err != nil {
+		tx2.Rollback(ctx)
+
+		return nil, "", "", "", "", fmt.Errorf("update realm free slots: %w", err)
+	}
+
+	if err := tx2.Commit(ctx); err != nil {
+		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
+	}*/
 
 	return wgconfx, fullname, person.Name, desc64, url64, nil
 }

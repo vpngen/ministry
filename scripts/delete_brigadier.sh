@@ -57,9 +57,25 @@ fi
 del="delbrigade -uuid ${bid}"
 echo "${del}"
 
-ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}"
+num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}")
 rc=$?
 if [ $rc -ne 0 ]; then
         echo "[-]         Something wrong with deletion: $rc"
         exit 1
 fi
+
+echo "[+]         ${num} slots rest"
+
+#psql -d "${DBNAME}" -q -t -A \
+#        --set ON_ERROR_STOP=yes \
+#        --set schema_name="${SCHEMA}" <<EOF
+#        --set free_slots="${num}" \
+#BEGIN;
+#        UPDATE :"schema_name".realms SET free_slots = :free_slots WHERE control_ip = :'REALM';
+#COMMIT;
+#EOF
+#rc=$?
+#if [ $rc -ne 0 ]; then
+#        echo "[-]         Something wrong with db: $rc"
+#        exit 1
+#fi

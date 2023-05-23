@@ -23,7 +23,7 @@ printdef () {
         echo "Options:"
         echo "    -h     Print this help message"       
         echo "Commands:"
-        echo "    add  <realm_id> <realm_name> <description>    # Add a realm"
+        echo "    add  <realm_id> <realm_name> <control_ip>    # Add a realm"
         echo "    activate <realm_id>                           # Activate a realm"
         echo "    deactivate <realm_id>                         # Deactivate a realm"
         echo "    info <realm_id>                               # Show realm info"
@@ -115,11 +115,11 @@ EOF
 }
 
 opt="$1"
-shift
-
 if [ -z "${opt}" ]; then
         printdef
 fi
+
+shift
 
 case "$opt" in
         add)

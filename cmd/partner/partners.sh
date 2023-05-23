@@ -154,11 +154,11 @@ EOF
 }
 
 opt="$1"
-shift
-
 if [ -z "${opt}" ]; then
         printdef
 fi
+
+shift
 
 case "$opt" in
         -h,--help)

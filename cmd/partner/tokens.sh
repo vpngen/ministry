@@ -30,6 +30,7 @@ addkey () {
         token="$2"
         token_name="$3"
 
+        # shellcheck disable=SC3037
         token=$(echo -n "${token}" | basenc -d --base64url | basenc --base64 -w 0)
 
         echo "token: ${token} name: ${token_name}     partner_id: ${partner_id}"
@@ -100,12 +101,11 @@ EOF
 }
 
 opt="$1";
-shift
-
 if [ -z "${opt}" ]; then
         printdef
 fi
 
+shift
 
 case "$opt" in
         -h,--help)

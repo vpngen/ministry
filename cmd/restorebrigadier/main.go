@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base32"
@@ -307,7 +308,14 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 
-	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
+	r := bufio.NewReader(httputil.NewChunkedReader(&b))
+
+	_, err = r.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("num read: %w", err)
+	}
+
+	wgconfx, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}

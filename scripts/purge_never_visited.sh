@@ -1,8 +1,9 @@
 #!/bin/sh
 
-SSHKEY=${SSHKEY:-"/etc/vgdept/id_ed25519"}
 DBNAME=${DBNAME:-"vgdept"}
-SCHEMA=${SCHEMA:-"library"}
+SCHEMA=${SCHEMA:-"head"}
+
+SSHKEY=${SSHKEY:-"/etc/vgdept/id_ed25519"}
 USERNAME=${USERNAME:-"_valera_"}
 REASON="never_visited"
 

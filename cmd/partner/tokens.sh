@@ -2,11 +2,9 @@
 
 set -e
 
-CONFDIR=${CONFDIR:-"/etc/vgdept"}
 DBNAME=${DBNAME:-"vgdept"}
-SCHEMA=${SCHEMA:-"library"}
+SCHEMA=${SCHEMA:-"head"}
 
-echo "CONFDIR: ${CONFDIR}"
 echo "DBNAME: ${DBNAME}"
 echo "SCHEMA: ${SCHEMA}"
 

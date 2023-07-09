@@ -1,0 +1,149 @@
+name: "vg-ministry"
+arch: "amd64"
+platform: "linux"
+version: ${PACKAGE_VERSION}
+section: "default"
+priority: "optional"
+release: ${PACKAGE_RELEASE}
+
+provides:
+- vg-ministry
+depends:
+- openssh-client
+- sudo
+- postgresql
+- jq
+
+maintainer: "Ingmund Ollson <ingmund@proton.me>"
+description: VPNGen datacenter management
+vendor: "VPNGen"
+homepage: "http://vpngen.org"
+license: "LGPL"
+
+contents:
+- dst: /etc/vgdept
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+
+- dst: /opt/vg-head-vpnapi
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: bin/checkbrigade
+  dst: /opt/vg-head-vpnapi/checkbrigade
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/createbrigade
+  dst: /opt/vg-head-vpnapi/createbrigade
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/restorebrigadier
+  dst: /opt/vg-head-vpnapi/restorebrigadier
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /opt/vg-head-stats
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: bin/syncstats
+  dst: /opt/vg-head-stats/syncstats
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /opt/vg-head-admin
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: ministry/scripts/delete_brigadier.sh
+  dst: /opt/vg-head-admin/delete_brigadier.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_brigadiers.sh
+  dst: /opt/vg-head-admin/purge_brigadiers.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_inactive.sh
+  dst: /opt/vg-head-admin/purge_inactive.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_never_active.sh
+  dst: /opt/vg-head-admin/purge_never_active.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/sync_free_slots.sh
+  dst: /opt/vg-head-admin/sync_free_slots.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/cmd/realm/realm.sh
+  dst: /opt/vg-head-admin/realm.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /opt/vg-partners-admin
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: ministry/cmd/partners/partners.sh
+  dst: /opt/vg-partners-admin/partners.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/cmd/partners/tokens.sh
+  dst: /opt/vg-partners-admin/tokens.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /usr/share/vg-head
+  type: dir
+  file_info:
+    mode: 0755
+    owner: root
+    group: root
+
+- src: ministry/sql
+  dst: /usr/share/vg-head/sql
+
+overrides:
+  deb:
+    scripts:
+      preinstall: /data/src/preinstall.sh
+      postinstall: /data/src/postinstall.sh
+      preremove: /data/src/preremove.sh
+      postremove: /data/src/postremove.sh
+deb:
+  compression: xz

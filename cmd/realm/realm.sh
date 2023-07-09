@@ -2,12 +2,9 @@
 
 set -e
 
-CONFDIR=${CONFDIR:-"/etc/vgdept"}
 DBNAME=${DBNAME:-"vgdept"}
-SCHEMA=${SCHEMA:-"library"}
-USERNAME=${USERNAME:-"_valera_"}
+SCHEMA=${SCHEMA:-"head"}
 
-echo "CONFDIR: ${CONFDIR}"
 echo "DBNAME: ${DBNAME}"
 echo "SCHEMA: ${SCHEMA}"
 
@@ -115,7 +112,7 @@ deactivate_dc () {
         --set schema_name"${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF
 BEGIN;
-        UPDATE :"schema_name".realms SET is_active=false, update_time=NOW() WHERE realm_id=:'realm_id';
+        UPDATE :"schema_name".realms SET is_active=false, update_time=NOW() AT TIME ZONE 'UTC' WHERE realm_id=:'realm_id';
 COMMIT;
 EOF
 

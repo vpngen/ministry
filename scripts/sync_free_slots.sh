@@ -1,10 +1,10 @@
 #!/bin/sh
 
-SSH_KEY=${SSH_KEY:-"/etc/vgdept/id_ed25519"}
 DBNAME=${DBNAME:-"vgdept"}
-SCHEMA=${SCHEMA:-"library"}
-USERNAME=${USERNAME:-"_valera_"}
+SCHEMA=${SCHEMA:-"head"}
 
+SSH_KEY=${SSH_KEY:-"/etc/vgdept/id_ed25519"}
+USERNAME=${USERNAME:-"_valera_"}
 
 get_realms_free_slot () {
         REALM_ID="${1}"

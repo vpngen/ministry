@@ -4,11 +4,9 @@ set -e
 
 # !!! partner deletion is not implemented yet and subject to discussion
 
-CONFDIR=${CONFDIR:-"/etc/vgdept"}
 DBNAME=${DBNAME:-"vgdept"}
-SCHEMA=${SCHEMA:-"library"}
+SCHEMA=${SCHEMA:-"head"}
 
-echo "CONFDIR: ${CONFDIR}"
 echo "DBNAME: ${DBNAME}"
 echo "SCHEMA: ${SCHEMA}"
 
@@ -48,7 +46,7 @@ addpartner () {
         --set partner_id="${partner_id}" \
         --set desc="${partner_desc}" <<EOF
 BEGIN;
-INSERT INTO :"schema_name".partners (partner_id,partner,is_active,update_time) VALUES (:'partner_id', :'desc', false, NOW());
+INSERT INTO :"schema_name".partners (partner_id,partner,is_active,update_time) VALUES (:'partner_id', :'desc', false, NOW() AT TIME ZONE 'UTC');
 COMMIT;
 EOF
 

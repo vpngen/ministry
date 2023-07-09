@@ -23,26 +23,22 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vpngen/ministry/internal/kdlib"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
 )
 
 const (
-	dbnameFilename     = "dbname"
-	schemaNameFilename = "schema"
-	etcDefaultPath     = "/etc/vgdept"
+	sshkeyRemoteUsername = "_valera_"
+	sshkeyDefaultPath    = "/etc/vgdept"
+	sshTimeOut           = time.Duration(80 * time.Second)
 )
 
 const (
-	maxPostgresqlNameLen = 63
-	postgresqlSocket     = "/var/run/postgresql"
-)
-
-const (
-	sshkeyED25519Filename = "id_ed25519"
-	sshkeyRemoteUsername  = "_valera_"
-	sshTimeOut            = time.Duration(80 * time.Second)
+	maxPostgresqlNameLen  = 63
+	defaultDatabaseURL    = "postgresql:///vgdept"
+	defaultBrigadesSchema = "head"
 )
 
 const defaultSeedExtra = "даблять"
@@ -87,22 +83,22 @@ func setLogTag() string {
 func main() {
 	var w io.WriteCloser
 
-	confDir := os.Getenv("CONFDIR")
-	if confDir == "" {
-		confDir = etcDefaultPath
-	}
-
 	name, mnemo, dryRun, chunked, _, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
 
-	dbname, schema, err := readConfigs(confDir)
+	sshKeyFilename, dbURL, schema, err := readConfigs()
 	if err != nil {
-		log.Fatalf("%s: Can't read configs: %s\n", LogTag, err)
+		log.Fatalf("Can't read configs: %s\n", err)
 	}
 
-	db, err := createDBPool(dbname)
+	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
+	if err != nil {
+		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
+	}
+
+	db, err := createDBPool(dbURL)
 	if err != nil {
 		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
@@ -137,11 +133,6 @@ func main() {
 		}
 
 		log.Fatalf("%s: Can't find key: %s\n", LogTag, err)
-	}
-
-	sshconf, err := createSSHConfig(confDir)
-	if err != nil {
-		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
 
 	switch del {
@@ -466,8 +457,8 @@ func saltByName(db *pgxpool.Pool, schema, name string) ([]byte, error) {
 	return salt, nil
 }
 
-func createDBPool(dbname string) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig(fmt.Sprintf("host=%s dbname=%s", postgresqlSocket, dbname))
+func createDBPool(dburl string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(dburl)
 	if err != nil {
 		return nil, fmt.Errorf("conn string: %w", err)
 	}
@@ -480,28 +471,23 @@ func createDBPool(dbname string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func readConfigs(path string) (string, string, error) {
-	f, err := os.Open(filepath.Join(path, dbnameFilename))
-	if err != nil {
-		return "", "", fmt.Errorf("can't open: %s: %w", dbnameFilename, err)
+func readConfigs() (string, string, string, error) {
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		dbURL = defaultDatabaseURL
 	}
 
-	dbname, err := io.ReadAll(io.LimitReader(f, maxPostgresqlNameLen))
-	if err != nil {
-		return "", "", fmt.Errorf("can't read: %s: %w", dbnameFilename, err)
+	brigadesSchema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
+	if brigadesSchema == "" {
+		brigadesSchema = defaultBrigadesSchema
 	}
 
-	f, err = os.Open(filepath.Join(path, schemaNameFilename))
+	sshKeyFilename, err := kdlib.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
-		return "", "", fmt.Errorf("can't open: %s: %w", schemaNameFilename, err)
+		return "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}
 
-	schema, err := io.ReadAll(io.LimitReader(f, maxPostgresqlNameLen))
-	if err != nil {
-		return "", "", fmt.Errorf("can't read: %s: %w", schemaNameFilename, err)
-	}
-
-	return string(dbname), string(schema), nil
+	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
 func parseArgs() (string, string, bool, bool, bool, error) {
@@ -532,30 +518,4 @@ func parseArgs() (string, string, bool, bool, bool, error) {
 
 func sanitizeNames(name string) string {
 	return strings.Join(strings.Fields(strings.Replace(name, ",", " ", -1)), " ")
-}
-
-func createSSHConfig(path string) (*ssh.ClientConfig, error) {
-	// var hostKey ssh.PublicKey
-
-	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
-	if err != nil {
-		return nil, fmt.Errorf("read private key: %w", err)
-	}
-
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key: %w", err)
-	}
-
-	config := &ssh.ClientConfig{
-		User: sshkeyRemoteUsername,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(signer),
-		},
-		// HostKeyCallback: ssh.FixedHostKey(hostKey),
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         sshTimeOut,
-	}
-
-	return config, nil
 }

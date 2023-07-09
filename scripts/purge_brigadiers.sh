@@ -1,7 +1,7 @@
 #!/bin/sh
 
 DBNAME=${DBNAME:-"vgdept"}
-SCHEMA=${SCHEMA:-"library"}
+SCHEMA=${SCHEMA:-"head"}
 
 DELETEDLIST=${DELETEDLIST:-"${HOME}/deleted_brigadiers.list"}
 

@@ -34,8 +34,8 @@ contents:
     mode: 0111
     owner: root
     group: root
-- src: bin/checkbrigade
-  dst: /opt/vg-head-vpnapi/checkbrigade
+- src: bin/checkbrigadier
+  dst: /opt/vg-head-vpnapi/checkbrigadier
   file_info:
     mode: 0005
     owner: root

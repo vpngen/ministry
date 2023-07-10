@@ -17,7 +17,8 @@ GRANT SELECT ON ALL TABLES IN SCHEMA :"schema_name" TO :"head_vpnapi_dbuser";
 GRANT 
         SELECT,UPDATE,INSERT,DELETE 
 ON 
-        :"schema_name".brigadiers, 
+        :"schema_name".brigadiers,
+        :"schema_name".brigadiers_ids, 
         :"schema_name".brigadier_salts, 
         :"schema_name".brigadier_keys, 
         :"schema_name".deleted_brigadiers, 

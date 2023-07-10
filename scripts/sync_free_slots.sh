@@ -15,7 +15,7 @@ get_realms_free_slot () {
                 exit 1
         fi
 
-        CMD="get_free_slots -a"
+        CMD="get_free_slots -fa"
 
         num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no -T "${USERNAME}"@"${CONTROL_IP}" "${CMD}")
         rc=$?

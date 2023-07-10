@@ -56,7 +56,7 @@ apply_database_patches () {
                 exit 1
         fi
 
-        rm -f "${SQL_DIR}/patches/*.sql"
+        rm -f "${SQL_DIR}/patch/*.sql"
 }
 
 

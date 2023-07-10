@@ -1,4 +1,4 @@
-name: "vg-ministry"
+name: "vg-head"
 arch: "amd64"
 platform: "linux"
 version: ${PACKAGE_VERSION}
@@ -7,7 +7,7 @@ priority: "optional"
 release: ${PACKAGE_RELEASE}
 
 provides:
-- vg-ministry
+- vg-head
 depends:
 - openssh-client
 - sudo
@@ -15,7 +15,7 @@ depends:
 - jq
 
 maintainer: "Ingmund Ollson <ingmund@proton.me>"
-description: VPNGen datacenter management
+description: VPNGen Ministry (head)
 vendor: "VPNGen"
 homepage: "http://vpngen.org"
 license: "LGPL"

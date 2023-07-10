@@ -90,8 +90,8 @@ contents:
     mode: 0005
     owner: root
     group: root
-- src: ministry/scripts/purge_never_active.sh
-  dst: /opt/vg-head-admin/purge_never_active.sh
+- src: ministry/scripts/purge_never_visited.sh
+  dst: /opt/vg-head-admin/purge_never_visited.sh
   file_info:
     mode: 0005
     owner: root

@@ -3,16 +3,45 @@
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"head"}
 
-SSHKEY=${SSHKEY:-"/etc/vgdept/id_ed25519"}
 USERNAME=${USERNAME:-"_valera_"}
 REASON=${REASON:-"manual_deletion"}
 
-bid=${1}
+if [ -z "${SSH_KEY}" ]; then
+        if [ -s "${HOME}/.ssh/id_ed25519" ]; then
+                SSH_KEY="${HOME}/.ssh/id_ed25519"
+        elif [ -s "${HOME}/.ssh/id_ecdsa" ]; then
+                SSH_KEY="${HOME}/.ssh/id_ecdsa"
+        elif [ -s "/etc/vgdept/id_ed25519" ]; then
+                SSH_KEY="/etc/vgdept/id_ed25519"
+        elif [ -s "/etc/vgdept/id_ecdsa" ]; then
+                SSH_KEY="/etc/vgdept/id_ecdsa"
+        else
+                echo "[-]         SSH key not found"
+                exit 1
+        fi
+fi
+
+bid="${1}"
 
 if [ -z "${bid}" ]; then
-        echo "Usage: $0 <brigade_id as UUID"
+        echo "Usage: $0 <brigade_id>"
         exit 1
 fi
+
+l=$(printf "%s" "$bid" | wc -c)
+
+if [ "$l" -eq 26 ]; then
+        echo "[?]         Brigade ID: ${bid}"
+
+        if ! bid=$(echo "${bid}=========" | base32 -d 2>/dev/null | hexdump -ve '1/1 "%02x"'); then
+                echo "[-]         Brigade ID is invalid"
+                exit 1
+        fi
+elif [ "$l" -ne 36 ]; then
+        echo "[-]         Brigade ID is invalid"
+        exit 1
+fi
+
 
 REALM=$(psql -d "${DBNAME}" -q -t -A \
         --set ON_ERROR_STOP=yes \

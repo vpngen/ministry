@@ -52,6 +52,36 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: ministry/scripts/delete_brigadier.sh
+  dst: /opt/vg-head-vpnapi/delete_brigadier.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_brigadiers.sh
+  dst: /opt/vg-head-vpnapi/purge_brigadiers.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_inactive.sh
+  dst: /opt/vg-head-vpnapi/purge_inactive.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_never_visited.sh
+  dst: /opt/vg-head-vpnapi/purge_never_visited.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/sync_free_slots.sh
+  dst: /opt/vg-head-vpnapi/sync_free_slots.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 
 - dst: /opt/vg-head-stats
   type: dir
@@ -70,36 +100,6 @@ contents:
   type: dir
   file_info:
     mode: 0111
-    owner: root
-    group: root
-- src: ministry/scripts/delete_brigadier.sh
-  dst: /opt/vg-head-admin/delete_brigadier.sh
-  file_info:
-    mode: 0005
-    owner: root
-    group: root
-- src: ministry/scripts/purge_brigadiers.sh
-  dst: /opt/vg-head-admin/purge_brigadiers.sh
-  file_info:
-    mode: 0005
-    owner: root
-    group: root
-- src: ministry/scripts/purge_inactive.sh
-  dst: /opt/vg-head-admin/purge_inactive.sh
-  file_info:
-    mode: 0005
-    owner: root
-    group: root
-- src: ministry/scripts/purge_never_visited.sh
-  dst: /opt/vg-head-admin/purge_never_visited.sh
-  file_info:
-    mode: 0005
-    owner: root
-    group: root
-- src: ministry/scripts/sync_free_slots.sh
-  dst: /opt/vg-head-admin/sync_free_slots.sh
-  file_info:
-    mode: 0005
     owner: root
     group: root
 - src: ministry/cmd/realms/realms.sh

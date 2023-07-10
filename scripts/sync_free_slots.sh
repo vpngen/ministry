@@ -3,8 +3,22 @@
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"head"}
 
-SSH_KEY=${SSH_KEY:-"/etc/vgdept/id_ed25519"}
 USERNAME=${USERNAME:-"_valera_"}
+
+if [ -z "${SSH_KEY}" ]; then
+        if [ -s "${HOME}/.ssh/id_ed25519" ]; then
+                SSH_KEY="${HOME}/.ssh/id_ed25519"
+        elif [ -s "${HOME}/.ssh/id_ecdsa" ]; then
+                SSH_KEY="${HOME}/.ssh/id_ecdsa"
+        elif [ -s "/etc/vgdept/id_ed25519" ]; then
+                SSH_KEY="/etc/vgdept/id_ed25519"
+        elif [ -s "/etc/vgdept/id_ecdsa" ]; then
+                SSH_KEY="/etc/vgdept/id_ecdsa"
+        else
+                echo "[-]         SSH key not found"
+                exit 1
+        fi
+fi
 
 get_realms_free_slot () {
         REALM_ID="${1}"

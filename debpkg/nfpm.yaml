@@ -102,8 +102,8 @@ contents:
     mode: 0005
     owner: root
     group: root
-- src: ministry/cmd/realm/realm.sh
-  dst: /opt/vg-head-admin/realm.sh
+- src: ministry/cmd/realms/realms.sh
+  dst: /opt/vg-head-admin/realms.sh
   file_info:
     mode: 0005
     owner: root

@@ -87,7 +87,7 @@ fi
 del="delbrigade -uuid ${bid}"
 echo "${del}"
 
-num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}")
+num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}")
 rc=$?
 if [ $rc -ne 0 ]; then
         echo "[-]         Something wrong with deletion: $rc"

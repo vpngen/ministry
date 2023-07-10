@@ -34,7 +34,7 @@ purge_per_realm () {
                 exit 1
         fi
 
-        wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${CMD}")
+        wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${CMD}")
         rc=$?
         if [ $rc -ne 0 ]; then
                 echo "[-]         Something wrong: $rc"
@@ -61,7 +61,7 @@ EOF
                 del="delbrigade -uuid ${bid}"
                 echo "${del}"
 
-                ssh -o IdentitiesOnly=yes -o IdentityFile="${SSHKEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}"
+                ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}"
                 rc=$?
                 if [ $rc -ne 0 ]; then
                         echo "[-]         Something wrong with deletion: $rc"

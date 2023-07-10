@@ -82,6 +82,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: ministry/cmd/sshcmd/ssh_command.sh
+  dst: /opt/vg-head-vpnapi/ssh_command.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 
 - dst: /opt/vg-head-stats
   type: dir

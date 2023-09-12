@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/http/httputil"
 	"net/netip"
 	"os"
@@ -23,7 +25,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vpngen/keydesk/keydesk"
+	"github.com/vpngen/ministry"
 	"github.com/vpngen/ministry/internal/kdlib"
+	realmadmin "github.com/vpngen/realm-admin"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
@@ -83,24 +88,9 @@ func setLogTag() string {
 func main() {
 	var w io.WriteCloser
 
-	name, mnemo, dryRun, chunked, _, err := parseArgs()
+	name, mnemo, dryRun, chunked, jout, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
-	}
-
-	sshKeyFilename, dbURL, schema, err := readConfigs()
-	if err != nil {
-		log.Fatalf("Can't read configs: %s\n", err)
-	}
-
-	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
-	if err != nil {
-		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
-	}
-
-	db, err := createDBPool(dbURL)
-	if err != nil {
-		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
 
 	switch chunked {
@@ -111,6 +101,21 @@ func main() {
 		w = os.Stdout
 	}
 
+	sshKeyFilename, dbURL, schema, err := readConfigs()
+	if err != nil {
+		fatal(w, jout, "Can't read configs: %s\n", err)
+	}
+
+	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+	}
+
+	db, err := createDBPool(dbURL)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create db pool: %s\n", LogTag, err)
+	}
+
 	salt, err := saltByName(db, schema, name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -119,7 +124,7 @@ func main() {
 			return
 		}
 
-		log.Fatalf("%s: Can't find a brigadier: %s\n", LogTag, err)
+		fatal(w, jout, "%s: Can't find a brigadier: %s\n", LogTag, err)
 	}
 
 	key := seedgenerator.SeedFromSaltMnemonics(mnemo, seedExtra, salt)
@@ -132,9 +137,10 @@ func main() {
 			return
 		}
 
-		log.Fatalf("%s: Can't find key: %s\n", LogTag, err)
+		fatal(w, jout, "%s: Can't find key: %s\n", LogTag, err)
 	}
 
+	var wgconfx *realmadmin.Answer
 	switch del {
 	case true:
 		fmt.Fprintf(os.Stderr, "%s: DELETED: %s: %s\n", LogTag, delReason, delTime.Format(time.RFC3339))
@@ -143,13 +149,10 @@ func main() {
 			return
 		}
 
-		wgconf, err := blessBrigade(db, schema, sshconf, id)
+		wgconfx, err = blessBrigade(db, schema, sshconf, id)
 		if err != nil {
-			log.Fatalf("%s: Can't bless brigade: %s", LogTag, err)
+			fatal(w, jout, "%s: Can't bless brigade: %s", LogTag, err)
 		}
-
-		fmt.Fprintln(w, "WGCONFIG")
-		fmt.Fprintln(w, string(wgconf))
 	default:
 		fmt.Fprintf(os.Stderr, "%s: ALIVE", LogTag)
 
@@ -157,18 +160,86 @@ func main() {
 			return
 		}
 
-		wgconf, err := replaceBrigadier(db, schema, sshconf, addr, id)
+		wgconfx, err = replaceBrigadier(db, schema, sshconf, addr, id)
 		if err != nil {
-			log.Fatalf("%s: Can't replace brigade: %s", LogTag, err)
+			fatal(w, jout, "%s: Can't replace brigade: %s", LogTag, err)
+		}
+	}
+
+	// TODO: repeated code. Refactor it.
+	switch jout {
+	case true:
+		answ := ministry.Answer{
+			Answer: realmadmin.Answer{
+				Answer: keydesk.Answer{
+					Code:    http.StatusCreated,
+					Desc:    http.StatusText(http.StatusCreated),
+					Status:  keydesk.AnswerStatusSuccess,
+					Configs: wgconfx.Answer.Configs,
+				},
+				KeydeskIPv6: wgconfx.KeydeskIPv6,
+				FreeSlots:   wgconfx.FreeSlots,
+			},
 		}
 
-		fmt.Fprintln(w, "WGCONFIG")
-		fmt.Fprintln(w, string(wgconf))
+		payload, err := json.Marshal(answ)
+		if err != nil {
+			fatal(w, jout, "%s: Can't marshal answer: %s\n", LogTag, err)
+		}
+
+		if _, err := w.Write(payload); err != nil {
+			fatal(w, jout, "%s: Can't write answer: %s\n", LogTag, err)
+		}
+	default:
+		_, err := fmt.Fprintln(w, "WGCONFIG")
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconfig: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, wgconfx.FreeSlots)
+		if err != nil {
+			log.Fatalf("%s: Can't print free slots: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, wgconfx.KeydeskIPv6)
+		if err != nil {
+			log.Fatalf("%s: Can't print keydesk ipv6: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, *wgconfx.Answer.Configs.WireguardConfig.FileName)
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconf filename: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, *wgconfx.Answer.Configs.WireguardConfig.FileContent)
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconf content: %s\n", LogTag, err)
+		}
 	}
 }
 
-func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, controlIP netip.Addr, id uuid.UUID) ([]byte, error) {
-	cmd := fmt.Sprintf("replacebrigadier -ch -id %s",
+const fatalString = `{
+	"code" : 500,
+	"desc" : "Internal Server Error",
+	"status" : "error",
+	"message" : "%s"
+}`
+
+func fatal(w io.Writer, jout bool, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+
+	switch jout {
+	case true:
+		fmt.Fprintf(w, fatalString, msg)
+	default:
+		fmt.Fprint(w, msg)
+	}
+
+	log.Fatal(msg)
+}
+
+func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, controlIP netip.Addr, id uuid.UUID) (*realmadmin.Answer, error) {
+	cmd := fmt.Sprintf("replacebrigadier -ch -j -id %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 	)
 
@@ -207,15 +278,20 @@ func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig
 		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 
-	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
+	payload, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
 
-	return wgconfx, nil
+	wgconf := &realmadmin.Answer{}
+	if err := json.Unmarshal(payload, &wgconf); err != nil {
+		return nil, fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	return wgconf, nil
 }
 
-func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, error) {
+func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*realmadmin.Answer, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -256,7 +332,7 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 	desc64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc))
 	url64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL))
 
-	cmd := fmt.Sprintf("addbrigade -ch -id %s -name %s -person %s -desc %s -url %s",
+	cmd := fmt.Sprintf("addbrigade -ch -j -id %s -name %s -person %s -desc %s -url %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 		fullname64,
 		person64,
@@ -306,9 +382,14 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("num read: %w", err)
 	}
 
-	wgconfx, err := io.ReadAll(r)
+	payload, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("chunk read: %w", err)
+	}
+
+	wgconf := &realmadmin.Answer{}
+	if err := json.Unmarshal(payload, &wgconf); err != nil {
+		return nil, fmt.Errorf("json unmarshal: %w", err)
 	}
 
 	tx, err = db.Begin(ctx)
@@ -353,7 +434,7 @@ VALUES
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
-	return wgconfx, nil
+	return wgconf, nil
 }
 
 func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, bool, time.Time, string, netip.Addr, error) {

@@ -11,6 +11,7 @@ type Answer struct {
 	realmadmin.Answer
 	KeydeskIPv6 netip.Addr            `json:"keydesk_ipv6"`
 	FreeSlots   int                   `json:"free_slots"`
-	Name        string                `json:"name"`
-	Person      namesgenerator.Person `json:"person"`
+	Name        string                `json:"name,omitempty"`
+	Mnemo       string                `json:"mnemo.omitempty"`
+	Person      namesgenerator.Person `json:"person.omitempty"`
 }

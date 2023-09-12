@@ -185,32 +185,6 @@ func main() {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
 
-	sshKeyFilename, dbURL, schema, err := readConfigs()
-	if err != nil {
-		log.Fatalf("Can't read configs: %s\n", err)
-	}
-
-	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
-	if err != nil {
-		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
-	}
-
-	db, err := createDBPool(dbURL)
-	if err != nil {
-		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
-	}
-
-	id, mnemo, err := createBrigade(db, schema, token, brigadeCreationType)
-	if err != nil {
-		log.Fatalf("%s: Can't create brigade: %s\n", LogTag, err)
-	}
-
-	// wgconfx = wgconf + keydesk IP
-	wgconfx, person, fullname, personName, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
-	if err != nil {
-		log.Fatalf("%s: Can't request brigade: %s\n", LogTag, err)
-	}
-
 	switch chunked {
 	case true:
 		w = httputil.NewChunkedWriter(os.Stdout)
@@ -219,6 +193,33 @@ func main() {
 		w = os.Stdout
 	}
 
+	sshKeyFilename, dbURL, schema, err := readConfigs()
+	if err != nil {
+		fatal(w, jout, "Can't read configs: %s\n", err)
+	}
+
+	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+	}
+
+	db, err := createDBPool(dbURL)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create db pool: %s\n", LogTag, err)
+	}
+
+	id, mnemo, err := createBrigade(db, schema, token, brigadeCreationType)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
+	}
+
+	// wgconfx = wgconf + keydesk IP
+	wgconfx, person, fullname, personName, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
+	if err != nil {
+		fatal(w, jout, "%s: Can't request brigade: %s\n", LogTag, err)
+	}
+
+	// TODO: Repeated code
 	switch jout {
 	case true:
 		answ := ministry.Answer{
@@ -232,6 +233,7 @@ func main() {
 				KeydeskIPv6: wgconfx.KeydeskIPv6,
 				FreeSlots:   wgconfx.FreeSlots,
 			},
+			Mnemo:  mnemo,
 			Name:   fullname,
 			Person: *person,
 		}

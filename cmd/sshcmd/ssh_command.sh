@@ -17,8 +17,8 @@ basedir=$(dirname "$0")
 
 if [ "createbrigade" = "${cmd}" ]; then
     "${basedir}"/createbrigade "$@"
-elif [ "recreatebrigadier" = "${cmd}" ]; then
-    "${basedir}"/recreatebrigadier "$@"
+elif [ "restorebrigadier" = "${cmd}" ]; then
+    "${basedir}"/restorebrigadier "$@"
 else
     echo "Unknown command: ${cmd}"
     printdef

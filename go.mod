@@ -6,8 +6,8 @@ require (
 	github.com/gofrs/uuid v4.3.1+incompatible
 	github.com/google/uuid v1.3.0
 	github.com/jackc/pgx/v5 v5.4.1
-	github.com/vpngen/keydesk v1.2.6
-	github.com/vpngen/realm-admin v1.2.8
+	github.com/vpngen/keydesk v1.3.4
+	github.com/vpngen/realm-admin v1.2.10
 	github.com/vpngen/wordsgens v0.0.0-20221214131824-ff06c1f70d47
 	golang.org/x/crypto v0.10.0
 )
@@ -15,6 +15,7 @@ require (
 require (
 	github.com/alexsergivan/transliterator v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
+	github.com/btcsuite/btcd/btcutil v1.1.3 // indirect
 	github.com/go-openapi/analysis v0.21.4 // indirect
 	github.com/go-openapi/errors v0.20.4 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect

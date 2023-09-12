@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/http/httputil"
 	"net/netip"
 	"os"
@@ -22,7 +24,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vpngen/keydesk/keydesk"
+	"github.com/vpngen/ministry"
 	"github.com/vpngen/ministry/internal/kdlib"
+	realmadmin "github.com/vpngen/realm-admin"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
@@ -175,7 +180,7 @@ func main() {
 
 	// fmt.Printf("token: %s\n", token)
 
-	chunked, token, err := parseArgs()
+	chunked, jout, token, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -201,7 +206,7 @@ func main() {
 	}
 
 	// wgconfx = wgconf + keydesk IP
-	wgconfx, fullname, person, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
+	wgconfx, person, fullname, personName, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
 	if err != nil {
 		log.Fatalf("%s: Can't request brigade: %s\n", LogTag, err)
 	}
@@ -214,39 +219,101 @@ func main() {
 		w = os.Stdout
 	}
 
-	_, err = fmt.Fprintln(w, fullname)
-	if err != nil {
-		log.Fatalf("%s: Can't print fullname: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, person)
-	if err != nil {
-		log.Fatalf("%s: Can't print person: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, desc64)
-	if err != nil {
-		log.Fatalf("%s: Can't print desc: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, url64)
-	if err != nil {
-		log.Fatalf("%s: Can't print url: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, mnemo)
-	if err != nil {
-		log.Fatalf("%s: Can't print memo: %s\n", LogTag, err)
-	}
+	switch jout {
+	case true:
+		answ := ministry.Answer{
+			Answer: realmadmin.Answer{
+				Answer: keydesk.Answer{
+					Code:    http.StatusCreated,
+					Desc:    http.StatusText(http.StatusCreated),
+					Status:  keydesk.AnswerStatusSuccess,
+					Configs: wgconfx.Answer.Configs,
+				},
+				KeydeskIPv6: wgconfx.KeydeskIPv6,
+				FreeSlots:   wgconfx.FreeSlots,
+			},
+			Name:   fullname,
+			Person: *person,
+		}
 
-	_, err = w.Write(wgconfx)
-	if err != nil {
-		log.Fatalf("%s: Can't print wgconfx: %s\n", LogTag, err)
+		payload, err := json.Marshal(answ)
+		if err != nil {
+			fatal(w, jout, "%s: Can't marshal answer: %s\n", LogTag, err)
+		}
+
+		if _, err := w.Write(payload); err != nil {
+			fatal(w, jout, "%s: Can't write answer: %s\n", LogTag, err)
+		}
+	default:
+		_, err = fmt.Fprintln(w, fullname)
+		if err != nil {
+			log.Fatalf("%s: Can't print fullname: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, personName)
+		if err != nil {
+			log.Fatalf("%s: Can't print person: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, desc64)
+		if err != nil {
+			log.Fatalf("%s: Can't print desc: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, url64)
+		if err != nil {
+			log.Fatalf("%s: Can't print url: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, mnemo)
+		if err != nil {
+			log.Fatalf("%s: Can't print memo: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, wgconfx.FreeSlots)
+		if err != nil {
+			log.Fatalf("%s: Can't print free slots: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, wgconfx.KeydeskIPv6)
+		if err != nil {
+			log.Fatalf("%s: Can't print keydesk ipv6: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, *wgconfx.Answer.Configs.WireguardConfig.FileName)
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconf filename: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, *wgconfx.Answer.Configs.WireguardConfig.FileContent)
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconf content: %s\n", LogTag, err)
+		}
 	}
 }
 
-func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, string, string, string, string, error) {
+const fatalString = `{
+	"code" : 500,
+	"desc" : "Internal Server Error",
+	"status" : "error",
+	"message" : "%s"
+}`
+
+func fatal(w io.Writer, jout bool, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+
+	switch jout {
+	case true:
+		fmt.Fprintf(w, fatalString, msg)
+	default:
+		fmt.Fprint(w, msg)
+	}
+
+	log.Fatal(msg)
+}
+
+func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*realmadmin.Answer, *namesgenerator.Person, string, string, string, string, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("begin: %w", err)
 	}
 
 	var (
@@ -271,11 +338,11 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return nil, "", "", "", "", fmt.Errorf("brigade query: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("brigade query: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("commit: %w", err)
 	}
 
 	fullname64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname))
@@ -283,7 +350,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	desc64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc))
 	url64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL))
 
-	cmd := fmt.Sprintf("addbrigade -ch -id %s -name %s -person %s -desc %s -url %s",
+	cmd := fmt.Sprintf("addbrigade -ch -j -id %s -name %s -person %s -desc %s -url %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 		fullname64,
 		person64,
@@ -295,13 +362,13 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", control_ip), sshconf)
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("ssh dial: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("ssh dial: %w", err)
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("ssh session: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("ssh session: %w", err)
 	}
 	defer session.Close()
 
@@ -323,19 +390,24 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	}()
 
 	if err := session.Run(cmd); err != nil {
-		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
 	}
 
 	r := bufio.NewReader(httputil.NewChunkedReader(&b))
 
 	_, err = r.ReadString('\n')
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("num read: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("num read: %w", err)
 	}
 
-	wgconfx, err := io.ReadAll(r)
+	payload, err := io.ReadAll(r)
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
+	}
+
+	wgconf := &realmadmin.Answer{}
+	if err := json.Unmarshal(payload, &wgconf); err != nil {
+		return nil, nil, "", "", "", "", fmt.Errorf("json unmarshal: %w", err)
 	}
 
 	/*freeSlots, err := strconv.Atoi(strings.TrimSpace(num))
@@ -359,7 +431,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
 	}*/
 
-	return wgconfx, fullname, person.Name, desc64, url64, nil
+	return wgconf, &person, fullname, person.Name, desc64, url64, nil
 }
 
 func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo string) (uuid.UUID, string, error) {
@@ -529,21 +601,22 @@ func readConfigs() (string, string, string, error) {
 	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
-func parseArgs() (bool, []byte, error) {
+func parseArgs() (bool, bool, []byte, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
+	jout := flag.Bool("j", false, "json output")
 
 	flag.Parse()
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
+		return false, false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return false, nil, fmt.Errorf("access token: %w", err)
+		return false, false, nil, fmt.Errorf("access token: %w", err)
 	}
 
-	return *chunked, token, nil
+	return *chunked, *jout, token, nil
 }

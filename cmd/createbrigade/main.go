@@ -397,11 +397,6 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 
 	r := bufio.NewReader(httputil.NewChunkedReader(&b))
 
-	_, err = r.ReadString('\n')
-	if err != nil {
-		return nil, nil, "", "", "", "", fmt.Errorf("num read: %w", err)
-	}
-
 	payload, err := io.ReadAll(r)
 	if err != nil {
 		return nil, nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
@@ -412,26 +407,33 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		return nil, nil, "", "", "", "", fmt.Errorf("json unmarshal: %w", err)
 	}
 
-	/*freeSlots, err := strconv.Atoi(strings.TrimSpace(num))
-	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("num parse: %w", err)
-	}
+	/*
+		_, err = r.ReadString('\n')
+			if err != nil {
+				return nil, nil, "", "", "", "", fmt.Errorf("num read: %w", err)
+			}
 
-	tx2, err := db.Begin(ctx)
-	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
-	}
+			freeSlots, err := strconv.Atoi(strings.TrimSpace(num))
+			if err != nil {
+				return nil, "", "", "", "", fmt.Errorf("num parse: %w", err)
+			}
 
-	sqlUpdateRealmFreeSlots := "UPDATE %s SET free_slots = $1 WHERE realm_id = $2"
-	if _, err := tx2.Exec(ctx, fmt.Sprintf(sqlUpdateRealmFreeSlots, pgx.Identifier{schema, "realms"}.Sanitize()), freeSlots, realm_id); err != nil {
-		tx2.Rollback(ctx)
+			tx2, err := db.Begin(ctx)
+			if err != nil {
+				return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
+			}
 
-		return nil, "", "", "", "", fmt.Errorf("update realm free slots: %w", err)
-	}
+			sqlUpdateRealmFreeSlots := "UPDATE %s SET free_slots = $1 WHERE realm_id = $2"
+			if _, err := tx2.Exec(ctx, fmt.Sprintf(sqlUpdateRealmFreeSlots, pgx.Identifier{schema, "realms"}.Sanitize()), freeSlots, realm_id); err != nil {
+				tx2.Rollback(ctx)
 
-	if err := tx2.Commit(ctx); err != nil {
-		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
-	}*/
+				return nil, "", "", "", "", fmt.Errorf("update realm free slots: %w", err)
+			}
+
+			if err := tx2.Commit(ctx); err != nil {
+				return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
+			}
+	*/
 
 	return wgconf, &person, fullname, person.Name, desc64, url64, nil
 }

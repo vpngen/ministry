@@ -11,28 +11,26 @@ import (
 	"net/http/httputil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vpngen/ministry/internal/kdlib"
 	"golang.org/x/crypto/ssh"
 )
 
 const (
-	defaultSchema = "library"
+	sshkeyRemoteUsername = "vgstats"
+	sshkeyDefaultPath    = "/etc/vgdept"
+	sshTimeOut           = time.Duration(80 * time.Second)
 )
 
 const (
-	sshkeyED25519Filename = "id_ed25519"
-	sshkeyRemoteUsername  = "vgstats"
-	etcDefaultPath        = "/etc/vgdept"
+	maxPostgresqlNameLen = 63
+	defaultDatabaseURL   = "postgresql:///vgdept"
+	defaultHeadSchema    = "head"
 )
-
-const (
-	defaultDatabaseURL = "postgresql:///vgdept"
-)
-
-const sshTimeOut = time.Duration(5 * time.Second)
 
 // UpdateTimeResultVersion - is a version of UpdateTimeResult struct.
 const UpdateTimeResultVersion = 1
@@ -91,17 +89,40 @@ type UpdatesPack struct {
 	UpdateTime      time.Time        `json:"update_time"`
 }
 
+var LogTag = setLogTag()
+
+const defaultLogTag = "syncstats"
+
+func setLogTag() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return defaultLogTag
+	}
+
+	return filepath.Base(executable)
+}
+
 func main() {
 	var addr string
-
-	sshKeyDir, addr1, dbURL, schema, err := readConfigs()
-	if err != nil {
-		log.Fatalf("Read configs: %s", err)
-	}
 
 	dryRun, addr2, err := parseArgs()
 	if err != nil {
 		log.Fatalf("Parse args: %s", err)
+	}
+
+	sshKeyFilename, addr1, dbURL, schema, err := readConfigs()
+	if err != nil {
+		log.Fatalf("Can't read configs: %s\n", err)
+	}
+
+	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
+	if err != nil {
+		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
+	}
+
+	db, err := createDBPool(dbURL)
+	if err != nil {
+		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
 
 	switch {
@@ -113,45 +134,35 @@ func main() {
 		log.Fatalf("Stats server address is not set")
 	}
 
-	sshConfig, err := createSSHConfig(sshKeyDir)
-	if err != nil {
-		log.Fatalf("Create SSH config: %s", err)
-	}
-
-	dbPool, err := createDBPool(dbURL)
-	if err != nil {
-		log.Fatalf("Create DB pool: %s", err)
-	}
-
 	fmt.Fprintf(os.Stderr, "Fetching last updates from %s\n", addr)
 
-	lastUpdates, err := fetchLastUpdates(sshConfig, addr)
+	lastUpdates, err := fetchLastUpdates(sshconf, addr)
 	if err != nil {
 		log.Fatalf("Can't fetch last updates: %s", err)
 	}
 
-	realms, err := syncRealms(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimeRealms)
+	realms, err := syncRealms(sshconf, addr, db, schema, lastUpdates.UpdateTimeRealms)
 	if err != nil {
 		log.Fatalf("Sync realms: %s", err)
 	}
 
 	log.Println(realms)
 
-	partners, err := syncPanters(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimePartners)
+	partners, err := syncPartners(sshconf, addr, db, schema, lastUpdates.UpdateTimePartners)
 	if err != nil {
 		log.Fatalf("Sync partners: %s", err)
 	}
 
 	log.Println(partners)
 
-	ids, err := syncIDs(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimeIDs)
+	ids, err := syncIDs(sshconf, addr, db, schema, lastUpdates.UpdateTimeIDs)
 	if err != nil {
 		log.Fatalf("Sync IDs: %s", err)
 	}
 
 	log.Println(ids)
 
-	actions, err := syncActions(sshConfig, addr, dbPool, schema, lastUpdates.UpdateTimeActions)
+	actions, err := syncActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeActions)
 	if err != nil {
 		log.Fatalf("Sync actions: %s", err)
 	}
@@ -175,9 +186,11 @@ func main() {
 		}
 
 		fmt.Println(string(buf))
+
+		return
 	}
 
-	if err := applyUpdates(sshConfig, addr, pack); err != nil {
+	if err := applyUpdates(sshconf, addr, pack); err != nil {
 		log.Fatalf("Apply updates: %s", err)
 	}
 }
@@ -202,33 +215,33 @@ func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *UpdatesPack
 	session.Stdout = &b
 	session.Stderr = &e
 
+	defer func() {
+		switch errstr := e.String(); errstr {
+		case "":
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr: empty\n", LogTag)
+		default:
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
+			for _, line := range strings.Split(errstr, "\n") {
+				fmt.Fprintf(os.Stderr, "%s: | %s\n", LogTag, line)
+			}
+		}
+	}()
+
 	stdin, err := session.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
 	if err := session.Start("/home/vgstats/syncids -ch sync"); err != nil {
-		fmt.Fprintf(os.Stderr, "start:\n%s\n", err)
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
-
 		return fmt.Errorf("start: %w", err)
 	}
 
 	if err := json.NewEncoder(httputil.NewChunkedWriter(stdin)).Encode(updates); err != nil {
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
-
 		return fmt.Errorf("encode: %w", err)
 	}
 
 	if err := session.Wait(); err != nil {
-		fmt.Fprintf(os.Stderr, "wait:\n%s\n", err)
-		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
-
 		return fmt.Errorf("wait: %w", err)
-	}
-
-	if e.String() != "" {
-		fmt.Fprintf(os.Stderr, "<<<<<\n%s\n>>>>>\n", e.String())
 	}
 
 	return nil
@@ -312,7 +325,7 @@ func queryActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) 
 	return updates, nil
 }
 
-func syncPanters(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
+func syncPartners(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst partners updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryPartnersUpdates(dbPool, schema, lastUpdate)
@@ -369,7 +382,7 @@ func queryPartnersUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time)
 				updates,
 				PartnersUpdate{
 					PartnerID:   partnerID,
-					PartnerName: partnerID,
+					PartnerName: partnerName,
 					UpdateTime:  updateTime,
 				},
 			)
@@ -407,7 +420,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 
 	defer tx.Rollback(ctx)
 
-	sqlGetRealms := `SELECT realm_id,update_time FROM %s WHERE update_time >= $1`
+	sqlGetRealms := `SELECT realm_id,realm_name,update_time FROM %s WHERE update_time >= $1`
 	rows, err := tx.Query(
 		ctx,
 		fmt.Sprintf(
@@ -425,6 +438,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 	var (
 		updates    = []RealmsUpdate{}
 		realmID    string
+		realmName  string
 		updateTime time.Time
 	)
 
@@ -432,6 +446,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 		rows,
 		[]any{
 			&realmID,
+			&realmName,
 			&updateTime,
 		},
 		func() error {
@@ -439,7 +454,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 				updates,
 				RealmsUpdate{
 					RealmID:    realmID,
-					RealmName:  realmID,
+					RealmName:  realmName,
 					UpdateTime: updateTime,
 				},
 			)
@@ -576,30 +591,13 @@ func fetchLastUpdates(sshConfig *ssh.ClientConfig, addr string) (UpdateTimeResul
 	return result, nil
 }
 
-func createSSHConfig(path string) (*ssh.ClientConfig, error) {
-	// var hostKey ssh.PublicKey
+func parseArgs() (bool, string, error) {
+	addr := flag.String("a", "", "address of stats server")
+	dryRun := flag.Bool("n", false, "dry run")
 
-	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
-	if err != nil {
-		return nil, fmt.Errorf("read private key: %w", err)
-	}
+	flag.Parse()
 
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key: %w", err)
-	}
-
-	config := &ssh.ClientConfig{
-		User: sshkeyRemoteUsername,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(signer),
-		},
-		// HostKeyCallback: ssh.FixedHostKey(hostKey),
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         sshTimeOut,
-	}
-
-	return config, nil
+	return *dryRun, *addr, nil
 }
 
 func createDBPool(dburl string) (*pgxpool.Pool, error) {
@@ -616,36 +614,23 @@ func createDBPool(dburl string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func parseArgs() (bool, string, error) {
-	addr := flag.String("a", "", "address of stats server")
-	dryRun := flag.Bool("n", false, "dry run")
-
-	flag.Parse()
-
-	return *dryRun, *addr, nil
-}
-
 func readConfigs() (string, string, string, string, error) {
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
 		dbURL = defaultDatabaseURL
 	}
 
-	schema := os.Getenv("SCHEMA")
-	if schema == "" {
-		schema = defaultSchema
+	headSchema := os.Getenv("HEAD_ADMIN_SCHEMA")
+	if headSchema == "" {
+		headSchema = defaultHeadSchema
+	}
+
+	sshKeyFilename, err := kdlib.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}
 
 	addr := os.Getenv("STATS_SERVER")
 
-	sshKeyDir := os.Getenv("CONFDIR")
-	if sshKeyDir == "" {
-		sshKeyDir = etcDefaultPath
-	}
-
-	if fstat, err := os.Stat(sshKeyDir); err != nil || !fstat.IsDir() {
-		sshKeyDir = etcDefaultPath
-	}
-
-	return sshKeyDir, addr, dbURL, schema, nil
+	return sshKeyFilename, addr, dbURL, headSchema, nil
 }

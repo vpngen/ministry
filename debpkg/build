@@ -1,0 +1,117 @@
+#!/bin/sh
+
+export SHARED_BASE="/data"
+
+constract_version () {
+        repo_path=$1
+
+        # Check if the current branch is the same as the branch to build
+        git -C "$repo_path" checkout "${BRANCH}"
+
+        # Get the last semver tag
+        l_tag=$(git -C "$repo_path" tag --list --sort=-v:refname 'v[0-9]*\.[0-9]*\.[0-9]*' | head -n 1)
+
+        # Check if the tag exists
+        if [ -z "$l_tag" ]; then
+          echo "No semver tag found in this repository."
+          exit 1
+        fi
+
+        # Check if the tagged commit is in the current branch
+        # BRANCH=$(git branch --show-current)
+        if ! git -C "$repo_path" branch --contains "$l_tag" | grep -E -q "^(\* )?$BRANCH"; then
+          echo "The last semver tagged commit ($l_tag) is not in the current branch ($BRANCH)."
+          exit 1
+        fi
+
+        # Check that no code diff between tagged commit and last commit in this branch
+        if ! git -C "$repo_path" diff --exit-code "$l_tag" HEAD >/dev/null 2>&1; then
+          echo "There is a code difference between the last semver tagged commit ($l_tag) and the last commit in this branch ($BRANCH)."
+          exit 1
+        else
+          echo "No code difference between the last semver tagged commit ($l_tag) and the last commit in this branch ($BRANCH)."
+        fi
+
+        # Export the new version
+        if [ "$BRANCH" = "prod" ]; then
+          PACKAGE_VERSION="${l_tag}"
+        else
+          PACKAGE_VERSION="${l_tag}-${BRANCH}"
+        fi
+
+        if [ -n "${VERMETADATA}" -a "${VERMETADATA}" != "-" ]; then
+          export PACKAGE_VERSION="${PACKAGE_VERSION}+${VERMETADATA}"
+        else 
+          export PACKAGE_VERSION="${PACKAGE_VERSION}"
+        fi
+
+        # File to store the execution count for each input value.
+        history_file="$SHARED_BASE/history.txt"
+
+        # Create the history file if it doesn't exist.
+        if [ ! -f "$history_file" ]; then
+          touch "$history_file"
+        fi
+
+        # Extract the execution count for the input value from the history file, defaulting to 0
+        count=$(grep -oE "^$l_tag [0-9]+" "$history_file" | awk '{print $2}')
+
+        # Increment the count and write the updated history line to the file
+        if [ -n "$count" ]; then
+                new_count=$((count + 1))
+                sed -i "s/^$l_tag [0-9]\+/$l_tag $new_count/" "$history_file"
+                export PACKAGE_RELEASE="${new_count}" 
+        else
+                echo "$l_tag 0" >> "$history_file"
+                unset PACKAGE_RELEASE
+        fi
+
+}
+
+if [ "$1" = "pkg" ]; then
+        set -e
+
+        export USER_UID="${USER_UID}"
+        export BRANCH="${BRANCH}"
+        export VERMETADATA="${VERMETADATA}"
+
+        if [ -z "${BRANCH}" ]; then
+                echo "No branch specified"
+                exit 1
+        fi
+
+        ssh-keyscan -t rsa github.com >> /etc/ssh/ssh_known_hosts
+        ssh-keyscan -t ecdsa github.com >> /etc/ssh/ssh_known_hosts
+        ssh-keyscan -t ed25519 github.com >> /etc/ssh/ssh_known_hosts
+
+        git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+        go env -w GOPRIVATE=github.com/vpngen
+
+        git clone -b "${BRANCH}" ssh://git@github.com/vpngen/ministry.git ministry
+        
+        constract_version "ministry"
+
+        ministry/debpkg/src/build.sh
+
+        exit 0
+fi
+
+GOLANG_VER="$(grep -e "^go\s" $(dirname $0)/../go.mod | awk '{print $2}')"
+
+# Get the current branch
+BRANCH=$(git branch --show-current)
+
+if [ -z "${VERMETADATA}" ]; then
+        VERMETADATA=$(hostname)
+        VERMETADATA=${VERMETADATA%%.*}
+fi
+
+docker run --rm \
+        -v $(readlink -f "$SSH_AUTH_SOCK"):/ssh-agent \
+        -e SSH_AUTH_SOCK=/ssh-agent \
+        -e USER_UID=$(id -u) \
+        -e BRANCH="${BRANCH}" \
+        -e VERMETADATA="${VERMETADATA}" \
+        -v "${PWD}":"${SHARED_BASE}" \
+        golang:"${GOLANG_VER}" "${SHARED_BASE}/build" pkg
+

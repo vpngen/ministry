@@ -2,6 +2,17 @@
 
 set -e
 
+DBNAME=${DBNAME:-"vgdept"}
+SCHEMA=${SCHEMA:-"head"}
+
+echo "DBNAME: ${DBNAME}"
+echo "SCHEMA: ${SCHEMA}"
+
+if [ -z "${DBNAME}" ] || [ -z "${SCHEMA}" ]; then
+        echo "Error: DBNAME and SCHEMA must be set"
+        exit 1
+fi
+
 printdef () {
         echo "Usage: $0 [options] command <partner_id> [command args and options]"
         echo "Options:"
@@ -17,21 +28,31 @@ addkey () {
         token="$2"
         token_name="$3"
 
+        if [ -z "${partner_id}" ] || [ -z "${token}" ] || [ -z "${token_name}" ]; then
+                echo "Error: partner_id, token and token_name must be set ($*)" >&2
+
+                printdef
+        fi
+
+        # shellcheck disable=SC3037
         token=$(echo -n "${token}" | basenc -d --base64url | basenc --base64 -w 0)
 
-        echo "token: ${token} name: ${name}     partner_id: ${partner_id}"
+        echo "token: ${token} name: ${token_name}     partner_id: ${partner_id}"
 
-        if [ "x" = "x${partner_id}" -o "x" = "x${token}" -o "x" = "x${token_name}" ]; then
+        if [ -z "${partner_id}" ] || [ -z "${token}" ] || [ -z "${token_name}" ]; then
+                echo "Error: partner_id, token and token_name must be set ($*)" >&2
+
                 printdef
         fi
 
         #token='\x'$(echo "${key}" | base64 --decode | hexdump -ve '1/1 "%02x"')
 
-        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
-    --set schema_name="${SCHEMA}" \
-    --set partner_id="${partner_id}" \
-    --set token="${token}" \
-    --set token_name="${token_name}" <<EOF
+        psql -qt -d "${DBNAME}" \
+        --set ON_ERROR_STOP=yes \
+        --set schema_name="${SCHEMA}" \
+        --set partner_id="${partner_id}" \
+        --set token="${token}" \
+        --set token_name="${token_name}" <<EOF
 BEGIN;
         INSERT INTO 
                 :"schema_name".partners_tokens 
@@ -47,16 +68,19 @@ EOF
 delkey () {
         partner_id="$1"
         token_name="$2"
-        if [ "x" = "x${partner_id}" -o "x" = "x${token}" ]; then
+        if [ -z "${partner_id}" ] || [ -z "${token}" ]; then
+                echo "Error: partner_id and token_name must be set ($*)" >&2
+
                 printdef
         fi
 
         # token='\x'$(echo "${key}" | base64 --decode | hexdump -ve '1/1 "%02x"')
 
-        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
-    --set schema_name="${SCHEMA}" \
-    --set partner_id="${partner_id}" \
-    --set token_name="${token_name}" <<EOF
+        psql -qt -d "${DBNAME}" \
+        --set ON_ERROR_STOP=yes \
+        --set schema_name="${SCHEMA}" \
+        --set partner_id="${partner_id}" \
+        --set token_name="${token_name}" <<EOF
 BEGIN;
         DELETE FROM 
                 :"schema_name".partners_tokens 
@@ -70,9 +94,10 @@ EOF
 }
 
 listkeys () {
-        ON_ERROR_STOP=yes psql -qt -d "${DBNAME}" \
-    --set schema_name="${SCHEMA}" \
-    --set partner_id="${partner_id}" <<EOF
+        psql -qt -d "${DBNAME}" \
+        --set ON_ERROR_STOP=yes \
+        --set schema_name="${SCHEMA}" \
+        --set partner_id="${partner_id}" <<EOF
 BEGIN;
         SELECT 
         CONCAT('    token: ',translate(encode(t.token, 'base64'),'+/=','-_'), ':', t.name, ' pid: ', p.partner_id, ' name: "', p.partner, '" status: ', p.is_active)
@@ -83,23 +108,13 @@ COMMIT;
 EOF
 }
 
-CONFDIR=${CONFDIR:-"/etc/vgdept"}
-echo "confdir: ${CONFDIR}"
-DBNAME=${DBNAME:-$(cat ${CONFDIR}/dbname)}
-echo "dbname: $DBNAME"
-SCHEMA=${SCHEMA:-$(cat ${CONFDIR}/schema)}
-echo "schema: $SCHEMA"
+opt="$1";
+if [ -z "${opt}" ]; then
+        echo "Error: no command specified" >&2
 
-if [ "x" = "x${DBNAME}" -o "x" = "x${SCHEMA}" ]; then
-        echo "ERROR: DBNAME and SCHEMA must be set"
-        exit 1
-fi
-
-if [ "x" = "x$1" ]; then
         printdef
 fi
 
-opt="$1";
 shift
 
 case "$opt" in
@@ -119,6 +134,3 @@ case "$opt" in
                 printdef
                 ;;
 esac
-
-
-

@@ -1,47 +1,48 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/http/httputil"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vpngen/keydesk/keydesk"
+	"github.com/vpngen/ministry"
+	"github.com/vpngen/ministry/internal/kdlib"
+	realmadmin "github.com/vpngen/realm-admin"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
 )
 
 const (
-	dbnameFilename        = "dbname"
-	schemaNameFilename    = "schema"
-	sshkeyED25519Filename = "id_ed25519"
-	sshkeyRemoteUsername  = "_valera_"
-	etcDefaultPath        = "/etc/vgdept"
+	sshkeyRemoteUsername = "_valera_"
+	sshkeyDefaultPath    = "/etc/vgdept"
+	sshTimeOut           = time.Duration(80 * time.Second)
 )
 
 const (
-	maxPostgresqlNameLen = 63
-	postgresqlSocket     = "/var/run/postgresql"
-)
-
-const (
-	sshSHA256Prefix = "SHA256:"
-	sshTimeOut      = time.Duration(5 * time.Second)
-	maxSSHAuthLen   = 1024 * 4
+	maxPostgresqlNameLen  = 63
+	defaultDatabaseURL    = "postgresql:///vgdept"
+	defaultBrigadesSchema = "head"
 )
 
 const maxCollisionAttemts = 1000
@@ -76,8 +77,11 @@ const (
 				%s AS t 					-- partners_tokens
 				JOIN  %s AS p ON p.partner_id=t.partner_id      -- partners
 				JOIN %s AS pr ON pr.partner_id=p.partner_id     -- partners_realms
+				JOIN %s AS r ON r.realm_id=pr.realm_id          -- realms
 			WHERE
 				p.is_active=true
+				AND r.is_active=true
+				AND r.free_slots>0
 				AND t.token=$4
 			ORDER BY RANDOM() LIMIT 1
 	`
@@ -129,7 +133,8 @@ const (
 	SELECT
 		brigadiers.brigadier,
 		brigadiers.person,
-		realms.control_ip
+		realms.control_ip,
+		realms.realm_id
 	FROM
 		%s,%s
 	WHERE
@@ -152,7 +157,7 @@ var seedExtra string // extra data for seed
 
 var LogTag = setLogTag()
 
-const defaultLogTag = "addbrigade"
+const defaultLogTag = "createbrigade"
 
 func setLogTag() string {
 	executable, err := os.Executable()
@@ -175,27 +180,22 @@ func main() {
 
 	// fmt.Printf("token: %s\n", token)
 
-	confDir := os.Getenv("CONFDIR")
-	if confDir == "" {
-		confDir = etcDefaultPath
-	}
-
-	chunked, token, err := parseArgs()
+	chunked, jout, token, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
 
-	dbname, schema, err := readConfigs(confDir)
+	sshKeyFilename, dbURL, schema, err := readConfigs()
 	if err != nil {
-		log.Fatalf("%s: Can't read configs: %s\n", LogTag, err)
+		log.Fatalf("Can't read configs: %s\n", err)
 	}
 
-	sshconf, err := createSSHConfig(confDir)
+	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
 	if err != nil {
 		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
 
-	db, err := createDBPool(dbname)
+	db, err := createDBPool(dbURL)
 	if err != nil {
 		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
 	}
@@ -206,7 +206,7 @@ func main() {
 	}
 
 	// wgconfx = wgconf + keydesk IP
-	wgconfx, fullname, person, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
+	wgconfx, person, fullname, personName, desc64, url64, err := requestBrigade(db, schema, sshconf, id)
 	if err != nil {
 		log.Fatalf("%s: Can't request brigade: %s\n", LogTag, err)
 	}
@@ -219,45 +219,108 @@ func main() {
 		w = os.Stdout
 	}
 
-	_, err = fmt.Fprintln(w, fullname)
-	if err != nil {
-		log.Fatalf("%s: Can't print fullname: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, person)
-	if err != nil {
-		log.Fatalf("%s: Can't print person: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, desc64)
-	if err != nil {
-		log.Fatalf("%s: Can't print desc: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, url64)
-	if err != nil {
-		log.Fatalf("%s: Can't print url: %s\n", LogTag, err)
-	}
-	_, err = fmt.Fprintln(w, mnemo)
-	if err != nil {
-		log.Fatalf("%s: Can't print memo: %s\n", LogTag, err)
-	}
+	switch jout {
+	case true:
+		answ := ministry.Answer{
+			Answer: realmadmin.Answer{
+				Answer: keydesk.Answer{
+					Code:    http.StatusCreated,
+					Desc:    http.StatusText(http.StatusCreated),
+					Status:  keydesk.AnswerStatusSuccess,
+					Configs: wgconfx.Answer.Configs,
+				},
+				KeydeskIPv6: wgconfx.KeydeskIPv6,
+				FreeSlots:   wgconfx.FreeSlots,
+			},
+			Name:   fullname,
+			Person: *person,
+		}
 
-	_, err = w.Write(wgconfx)
-	if err != nil {
-		log.Fatalf("%s: Can't print wgconfx: %s\n", LogTag, err)
+		payload, err := json.Marshal(answ)
+		if err != nil {
+			fatal(w, jout, "%s: Can't marshal answer: %s\n", LogTag, err)
+		}
+
+		if _, err := w.Write(payload); err != nil {
+			fatal(w, jout, "%s: Can't write answer: %s\n", LogTag, err)
+		}
+	default:
+		_, err = fmt.Fprintln(w, fullname)
+		if err != nil {
+			log.Fatalf("%s: Can't print fullname: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, personName)
+		if err != nil {
+			log.Fatalf("%s: Can't print person: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, desc64)
+		if err != nil {
+			log.Fatalf("%s: Can't print desc: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, url64)
+		if err != nil {
+			log.Fatalf("%s: Can't print url: %s\n", LogTag, err)
+		}
+		_, err = fmt.Fprintln(w, mnemo)
+		if err != nil {
+			log.Fatalf("%s: Can't print memo: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, wgconfx.FreeSlots)
+		if err != nil {
+			log.Fatalf("%s: Can't print free slots: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, wgconfx.KeydeskIPv6)
+		if err != nil {
+			log.Fatalf("%s: Can't print keydesk ipv6: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, *wgconfx.Answer.Configs.WireguardConfig.FileName)
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconf filename: %s\n", LogTag, err)
+		}
+
+		_, err = fmt.Fprintln(w, *wgconfx.Answer.Configs.WireguardConfig.FileContent)
+		if err != nil {
+			log.Fatalf("%s: Can't print wgconf content: %s\n", LogTag, err)
+		}
 	}
 }
 
-func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) ([]byte, string, string, string, string, error) {
+const fatalString = `{
+	"code" : 500,
+	"desc" : "Internal Server Error",
+	"status" : "error",
+	"message" : "%s"
+}`
+
+func fatal(w io.Writer, jout bool, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+
+	switch jout {
+	case true:
+		fmt.Fprintf(w, fatalString, msg)
+	default:
+		fmt.Fprint(w, msg)
+	}
+
+	log.Fatal(msg)
+}
+
+func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*realmadmin.Answer, *namesgenerator.Person, string, string, string, string, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("begin: %w", err)
 	}
 
 	var (
 		fullname   string
 		person     namesgenerator.Person
 		control_ip netip.Addr
+		realm_id   uuid.UUID
 	)
 
 	err = tx.QueryRow(ctx,
@@ -270,16 +333,16 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		&fullname,
 		&person,
 		&control_ip,
+		&realm_id,
 	)
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return nil, "", "", "", "", fmt.Errorf("brigade query: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("brigade query: %w", err)
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
+	if err = tx.Commit(ctx); err != nil {
+		return nil, nil, "", "", "", "", fmt.Errorf("commit: %w", err)
 	}
 
 	fullname64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname))
@@ -287,7 +350,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	desc64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.Desc))
 	url64 := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(person.URL))
 
-	cmd := fmt.Sprintf("addbrigade -ch -id %s -name %s -person %s -desc %s -url %s",
+	cmd := fmt.Sprintf("addbrigade -ch -j -id %s -name %s -person %s -desc %s -url %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 		fullname64,
 		person64,
@@ -299,13 +362,13 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 
 	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", control_ip), sshconf)
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("ssh dial: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("ssh dial: %w", err)
 	}
 	defer client.Close()
 
 	session, err := client.NewSession()
 	if err != nil {
-		return nil, "", "", "", "", fmt.Errorf("ssh session: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("ssh session: %w", err)
 	}
 	defer session.Close()
 
@@ -314,24 +377,61 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 	session.Stdout = &b
 	session.Stderr = &e
 
+	defer func() {
+		switch errstr := e.String(); errstr {
+		case "":
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr: empty\n", LogTag)
+		default:
+			fmt.Fprintf(os.Stderr, "%s: SSH Session StdErr:\n", LogTag)
+			for _, line := range strings.Split(errstr, "\n") {
+				fmt.Fprintf(os.Stderr, "%s: | %s\n", LogTag, line)
+			}
+		}
+	}()
+
 	if err := session.Run(cmd); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, e.String())
-
-		return nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("ssh run: %w", err)
 	}
 
-	if errstr := e.String(); errstr != "" {
-		fmt.Fprintf(os.Stderr, "%s: session errors:\n%s\n", LogTag, errstr)
-	}
+	r := bufio.NewReader(httputil.NewChunkedReader(&b))
 
-	wgconfx, err := io.ReadAll(httputil.NewChunkedReader(&b))
+	_, err = r.ReadString('\n')
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: readed data:\n%s\n", LogTag, wgconfx)
-
-		return nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
+		return nil, nil, "", "", "", "", fmt.Errorf("num read: %w", err)
 	}
 
-	return wgconfx, fullname, person.Name, desc64, url64, nil
+	payload, err := io.ReadAll(r)
+	if err != nil {
+		return nil, nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
+	}
+
+	wgconf := &realmadmin.Answer{}
+	if err := json.Unmarshal(payload, &wgconf); err != nil {
+		return nil, nil, "", "", "", "", fmt.Errorf("json unmarshal: %w", err)
+	}
+
+	/*freeSlots, err := strconv.Atoi(strings.TrimSpace(num))
+	if err != nil {
+		return nil, "", "", "", "", fmt.Errorf("num parse: %w", err)
+	}
+
+	tx2, err := db.Begin(ctx)
+	if err != nil {
+		return nil, "", "", "", "", fmt.Errorf("begin: %w", err)
+	}
+
+	sqlUpdateRealmFreeSlots := "UPDATE %s SET free_slots = $1 WHERE realm_id = $2"
+	if _, err := tx2.Exec(ctx, fmt.Sprintf(sqlUpdateRealmFreeSlots, pgx.Identifier{schema, "realms"}.Sanitize()), freeSlots, realm_id); err != nil {
+		tx2.Rollback(ctx)
+
+		return nil, "", "", "", "", fmt.Errorf("update realm free slots: %w", err)
+	}
+
+	if err := tx2.Commit(ctx); err != nil {
+		return nil, "", "", "", "", fmt.Errorf("commit: %w", err)
+	}*/
+
+	return wgconf, &person, fullname, person.Name, desc64, url64, nil
 }
 
 func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo string) (uuid.UUID, string, error) {
@@ -384,6 +484,7 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo s
 				pgx.Identifier{schema, "partners_tokens"}.Sanitize(),
 				pgx.Identifier{schema, "partners"}.Sanitize(),
 				pgx.Identifier{schema, "partners_realms"}.Sanitize(),
+				pgx.Identifier{schema, "realms"}.Sanitize(),
 			),
 			id,
 			fullname,
@@ -467,8 +568,8 @@ func createBrigade(db *pgxpool.Pool, schema string, token []byte, creationInfo s
 	return id, mnemo, nil
 }
 
-func createDBPool(dbname string) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig(fmt.Sprintf("host=%s dbname=%s", postgresqlSocket, dbname))
+func createDBPool(dburl string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(dburl)
 	if err != nil {
 		return nil, fmt.Errorf("conn string: %w", err)
 	}
@@ -481,71 +582,41 @@ func createDBPool(dbname string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func readConfigs(path string) (string, string, error) {
-	f, err := os.Open(filepath.Join(path, dbnameFilename))
-	if err != nil {
-		return "", "", fmt.Errorf("can't open: %s: %w", dbnameFilename, err)
+func readConfigs() (string, string, string, error) {
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		dbURL = defaultDatabaseURL
 	}
 
-	dbname, err := io.ReadAll(io.LimitReader(f, maxPostgresqlNameLen))
-	if err != nil {
-		return "", "", fmt.Errorf("can't read: %s: %w", dbnameFilename, err)
+	brigadesSchema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
+	if brigadesSchema == "" {
+		brigadesSchema = defaultBrigadesSchema
 	}
 
-	f, err = os.Open(filepath.Join(path, schemaNameFilename))
+	sshKeyFilename, err := kdlib.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
-		return "", "", fmt.Errorf("can't open: %s: %w", schemaNameFilename, err)
+		return "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}
 
-	schema, err := io.ReadAll(io.LimitReader(f, maxPostgresqlNameLen))
-	if err != nil {
-		return "", "", fmt.Errorf("can't read: %s: %w", schemaNameFilename, err)
-	}
-
-	return string(dbname), string(schema), nil
+	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
-func createSSHConfig(path string) (*ssh.ClientConfig, error) {
-	// var hostKey ssh.PublicKey
-
-	key, err := os.ReadFile(filepath.Join(path, sshkeyED25519Filename))
-	if err != nil {
-		return nil, fmt.Errorf("read private key: %w", err)
-	}
-
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key: %w", err)
-	}
-
-	config := &ssh.ClientConfig{
-		User: sshkeyRemoteUsername,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(signer),
-		},
-		// HostKeyCallback: ssh.FixedHostKey(hostKey),
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         sshTimeOut,
-	}
-
-	return config, nil
-}
-
-func parseArgs() (bool, []byte, error) {
+func parseArgs() (bool, bool, []byte, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
+	jout := flag.Bool("j", false, "json output")
 
 	flag.Parse()
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
+		return false, false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return false, nil, fmt.Errorf("access token: %w", err)
+		return false, false, nil, fmt.Errorf("access token: %w", err)
 	}
 
-	return *chunked, token, nil
+	return *chunked, *jout, token, nil
 }

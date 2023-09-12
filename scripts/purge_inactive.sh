@@ -4,10 +4,7 @@ DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"head"}
 
 USERNAME=${USERNAME:-"_valera_"}
-REASON="never_visited"
-
-DAYS=${DAYS:-"1"}
-NUMS=${NUMS:-"100"}
+REASON="inactive"
 
 if [ -z "${SSH_KEY}" ]; then
         if [ -s "${HOME}/.ssh/id_ed25519" ]; then
@@ -24,16 +21,14 @@ if [ -z "${SSH_KEY}" ]; then
         fi
 fi
 
-CMD="getwasted notvisited -d ${DAYS} -n ${NUMS}"
+DAYS=${DAYS:-"1"}
+NUMS=${NUMS:-"1000"}
+
+CMD="getwasted inactive -m ${DAYS} -n ${NUMS}"
 echo "GET WASTED: ${CMD}"
 
 purge_per_realm () {
         REALM="${1}"
-        if [ -z "${REALM}" ]; then
-                echo "[!]         Realm is empty"
-                exit 1
-        fi
-
         wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${CMD}")
         rc=$?
         if [ $rc -ne 0 ]; then
@@ -42,6 +37,8 @@ purge_per_realm () {
         fi
 
         for bid in ${wasted}; do
+                echo "delete ${bid}"
+
                 psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${bid}" \
@@ -68,8 +65,6 @@ EOF
                         continue
                 fi
         done
-
-        # !!! fetch free slots
 }
 
 realms=$(psql -d "${DBNAME}" \

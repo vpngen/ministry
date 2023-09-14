@@ -23,7 +23,7 @@ ON
         :"schema_name".brigadier_keys, 
         :"schema_name".deleted_brigadiers, 
         :"schema_name".brigades_actions 
-  
+TO  
         :"head_vpnapi_dbuser";
 GRANT SELECT,UPDATE ON :"schema_name".realms TO :"head_vpnapi_dbuser"; -- shit
 GRANT SELECT ON :"schema_name".partners, :"schema_name".partners_realms TO :"head_vpnapi_dbuser";

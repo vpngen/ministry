@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/base32"
@@ -375,14 +374,7 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 
-	r := bufio.NewReader(httputil.NewChunkedReader(&b))
-
-	_, err = r.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("num read: %w", err)
-	}
-
-	payload, err := io.ReadAll(r)
+	payload, err := io.ReadAll(httputil.NewChunkedReader(&b))
 	if err != nil {
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
@@ -397,6 +389,8 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("begin2: %w", err)
 	}
 
+	defer tx.Rollback(ctx)
+
 	sqlRemoveDeleted := `DELETE FROM %s WHERE brigade_id=$1`
 	_, err = tx.Exec(ctx,
 		fmt.Sprintf(sqlRemoveDeleted,
@@ -405,8 +399,6 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		id,
 	)
 	if err != nil {
-		tx.Rollback(ctx)
-
 		return nil, fmt.Errorf("delete deleted: %w", err)
 	}
 
@@ -424,8 +416,6 @@ VALUES
 		id,
 	)
 	if err != nil {
-		tx.Rollback(ctx)
-
 		return nil, fmt.Errorf("insert restore: %w", err)
 	}
 

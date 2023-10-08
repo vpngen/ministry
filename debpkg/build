@@ -39,7 +39,7 @@ constract_version () {
           PACKAGE_VERSION="${l_tag}-${BRANCH}"
         fi
 
-        if [ -n "${VERMETADATA}" -a "${VERMETADATA}" != "-" ]; then
+        if [ -n "${VERMETADATA}" ] && [ "${VERMETADATA}" != "-" ]; then
           export PACKAGE_VERSION="${PACKAGE_VERSION}+${VERMETADATA}"
         else 
           export PACKAGE_VERSION="${PACKAGE_VERSION}"
@@ -74,20 +74,18 @@ if [ "$1" = "pkg" ]; then
         export USER_UID="${USER_UID}"
         export BRANCH="${BRANCH}"
         export VERMETADATA="${VERMETADATA}"
-
+        export GIT_USER="${GIT_USER}"
+        export GIT_PASSWORD="${GIT_PASSWORD}"
+        
         if [ -z "${BRANCH}" ]; then
                 echo "No branch specified"
                 exit 1
         fi
 
-        ssh-keyscan -t rsa github.com >> /etc/ssh/ssh_known_hosts
-        ssh-keyscan -t ecdsa github.com >> /etc/ssh/ssh_known_hosts
-        ssh-keyscan -t ed25519 github.com >> /etc/ssh/ssh_known_hosts
-
-        git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+        git config --global credential.helper "!f() { echo \"username=${GIT_USER}\"; echo \"password=${GIT_PASSWORD}\"; }; f"
         go env -w GOPRIVATE=github.com/vpngen
 
-        git clone -b "${BRANCH}" ssh://git@github.com/vpngen/ministry.git ministry
+        git clone -b "${BRANCH}" https://github.com/vpngen/ministry.git ministry
         
         constract_version "ministry"
 
@@ -96,7 +94,7 @@ if [ "$1" = "pkg" ]; then
         exit 0
 fi
 
-GOLANG_VER="$(grep -e "^go\s" $(dirname $0)/../go.mod | awk '{print $2}')"
+GOLANG_VER="$(grep -e "^go\s" "$(dirname "$0")/../go.mod" | awk '{print $2}')"
 
 # Get the current branch
 BRANCH=$(git branch --show-current)
@@ -106,12 +104,15 @@ if [ -z "${VERMETADATA}" ]; then
         VERMETADATA=${VERMETADATA%%.*}
 fi
 
+GIT_USER=${GIT_USER:-git}
+GIT_PASSWORD=${GIT_PASSWORD:-"$(cat ~/.github_token)"}
+
 docker run --rm \
-        -v $(readlink -f "$SSH_AUTH_SOCK"):/ssh-agent \
-        -e SSH_AUTH_SOCK=/ssh-agent \
-        -e USER_UID=$(id -u) \
+        -e USER_UID="$(id -u)" \
         -e BRANCH="${BRANCH}" \
         -e VERMETADATA="${VERMETADATA}" \
+        -e GIT_USER="${GIT_USER}" \
+        -e GIT_PASSWORD="${GIT_PASSWORD}" \
         -v "${PWD}":"${SHARED_BASE}" \
         golang:"${GOLANG_VER}" "${SHARED_BASE}/build" pkg
 

@@ -24,10 +24,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/keydesk/keydesk"
 	"github.com/vpngen/ministry"
 	"github.com/vpngen/ministry/internal/kdlib"
-	realmadmin "github.com/vpngen/realm-admin"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
@@ -139,7 +139,7 @@ func main() {
 		fatal(w, jout, "%s: Can't find key: %s\n", LogTag, err)
 	}
 
-	var wgconfx *realmadmin.Answer
+	var wgconfx *dcmgmt.Answer
 	switch del {
 	case true:
 		fmt.Fprintf(os.Stderr, "%s: DELETED: %s: %s\n", LogTag, delReason, delTime.Format(time.RFC3339))
@@ -169,7 +169,7 @@ func main() {
 	switch jout {
 	case true:
 		answ := ministry.Answer{
-			Answer: realmadmin.Answer{
+			Answer: dcmgmt.Answer{
 				Answer: keydesk.Answer{
 					Code:    http.StatusCreated,
 					Desc:    http.StatusText(http.StatusCreated),
@@ -237,7 +237,7 @@ func fatal(w io.Writer, jout bool, format string, args ...any) {
 	log.Fatal(msg)
 }
 
-func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, controlIP netip.Addr, id uuid.UUID) (*realmadmin.Answer, error) {
+func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, controlIP netip.Addr, id uuid.UUID) (*dcmgmt.Answer, error) {
 	cmd := fmt.Sprintf("replacebrigadier -ch -j -id %s",
 		base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(id[:]),
 	)
@@ -282,7 +282,7 @@ func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
 
-	wgconf := &realmadmin.Answer{}
+	wgconf := &dcmgmt.Answer{}
 	if err := json.Unmarshal(payload, &wgconf); err != nil {
 		return nil, fmt.Errorf("json unmarshal: %w", err)
 	}
@@ -290,7 +290,7 @@ func replaceBrigadier(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig
 	return wgconf, nil
 }
 
-func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*realmadmin.Answer, error) {
+func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*dcmgmt.Answer, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -379,7 +379,7 @@ func blessBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id
 		return nil, fmt.Errorf("chunk read: %w", err)
 	}
 
-	wgconf := &realmadmin.Answer{}
+	wgconf := &dcmgmt.Answer{}
 	if err := json.Unmarshal(payload, &wgconf); err != nil {
 		return nil, fmt.Errorf("json unmarshal: %w", err)
 	}

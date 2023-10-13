@@ -5,9 +5,9 @@ go 1.21
 require (
 	github.com/google/uuid v1.3.1
 	github.com/jackc/pgx/v5 v5.4.3
-	github.com/vpngen/keydesk v1.3.10
-	github.com/vpngen/realm-admin v1.2.17
-	github.com/vpngen/wordsgens v1.0.1
+	github.com/vpngen/dc-mgmt v1.3.1
+	github.com/vpngen/keydesk v1.3.13
+	github.com/vpngen/wordsgens v1.0.2
 	golang.org/x/crypto v0.14.0
 )
 

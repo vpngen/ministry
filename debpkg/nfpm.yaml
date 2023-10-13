@@ -76,6 +76,18 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: ministry/scripts/sync_abandoned.sh
+  dst: /opt/vg-head-vpnapi/sync_abandoned.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/sync_deleted.sh
+  dst: /opt/vg-head-vpnapi/sync_deleted.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: ministry/scripts/sync_free_slots.sh
   dst: /opt/vg-head-vpnapi/sync_free_slots.sh
   file_info:

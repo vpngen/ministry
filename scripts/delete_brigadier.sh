@@ -76,6 +76,7 @@ psql -d "${DBNAME}" -q -t -A \
         --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
         INSERT INTO :"schema_name".deleted_brigadiers (brigade_id, reason) VALUES (:'brigade_id',:'reason') ON CONFLICT DO NOTHING;
+        INSERT INTO :"schema_name".brigades_actions (brigade_id, event_name, event_info, event_time) VALUES (:'brigade_id', 'delete_brigade', :'reason', now() AT TIME ZONE 'UTC');
 COMMIT;
 EOF
 rc=$?
@@ -95,17 +96,3 @@ if [ $rc -ne 0 ]; then
 fi
 
 echo "[+]         ${num} slots rest"
-
-#psql -d "${DBNAME}" -q -t -A \
-#        --set ON_ERROR_STOP=yes \
-#        --set schema_name="${SCHEMA}" <<EOF
-#        --set free_slots="${num}" \
-#BEGIN;
-#        UPDATE :"schema_name".realms SET free_slots = :free_slots WHERE control_ip = :'REALM';
-#COMMIT;
-#EOF
-#rc=$?
-#if [ $rc -ne 0 ]; then
-#        echo "[-]         Something wrong with db: $rc"
-#        exit 1
-#fi

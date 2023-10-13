@@ -1,12 +1,12 @@
 package ministry
 
 import (
-	realmadmin "github.com/vpngen/realm-admin"
+	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/wordsgens/namesgenerator"
 )
 
 type Answer struct {
-	realmadmin.Answer
+	dcmgmt.Answer
 	Name   string                `json:"name,omitempty"`
 	Mnemo  string                `json:"mnemo.omitempty"`
 	Person namesgenerator.Person `json:"person.omitempty"`

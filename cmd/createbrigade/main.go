@@ -24,10 +24,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/keydesk/keydesk"
 	"github.com/vpngen/ministry"
 	"github.com/vpngen/ministry/internal/kdlib"
-	realmadmin "github.com/vpngen/realm-admin"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
@@ -223,7 +223,7 @@ func main() {
 	switch jout {
 	case true:
 		answ := ministry.Answer{
-			Answer: realmadmin.Answer{
+			Answer: dcmgmt.Answer{
 				Answer: keydesk.Answer{
 					Code:    http.StatusCreated,
 					Desc:    http.StatusText(http.StatusCreated),
@@ -310,7 +310,7 @@ func fatal(w io.Writer, jout bool, format string, args ...any) {
 	log.Fatal(msg)
 }
 
-func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*realmadmin.Answer, *namesgenerator.Person, string, string, string, string, error) {
+func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, id uuid.UUID) (*dcmgmt.Answer, *namesgenerator.Person, string, string, string, string, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -402,7 +402,7 @@ func requestBrigade(db *pgxpool.Pool, schema string, sshconf *ssh.ClientConfig, 
 		return nil, nil, "", "", "", "", fmt.Errorf("chunk read: %w", err)
 	}
 
-	wgconf := &realmadmin.Answer{}
+	wgconf := &dcmgmt.Answer{}
 	if err := json.Unmarshal(payload, &wgconf); err != nil {
 		return nil, nil, "", "", "", "", fmt.Errorf("json unmarshal: %w", err)
 	}

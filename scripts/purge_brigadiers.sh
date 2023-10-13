@@ -8,9 +8,9 @@ DELETEDLIST=${DELETEDLIST:-"${HOME}/deleted_brigadiers.list"}
 INTERVAL=${INTERVAL:-"1 mons"}
 NUMS=${NUMS:-"10"}
 
-list=$(psql -d "${DBNAME}" -t -A -q \
+psql -d "${DBNAME}" -t -A -q \
         --set schema_name="${SCHEMA}" \
-        --set interval="${INTERVAL}" <<EOF
+        --set interval="${INTERVAL}" <<EOF | tee -a "${DELETEDLIST}"
 BEGIN;
         SELECT 
                  NOW() AT TIME ZONE 'UTC',
@@ -23,11 +23,6 @@ BEGIN;
                 d.deleted_at < NOW() AT TIME ZONE 'UTC' - interval :'interval';
 COMMIT;
 EOF
-)
-
-for line in ${list}; do
-        echo "${line}" | tee -a "${DELETEDLIST}"
-done
 
 psql -d "${DBNAME}" -t -A \
         --set interval="${INTERVAL}" <<EOF

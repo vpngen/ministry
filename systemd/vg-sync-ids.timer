@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync brigades ids with stats server
+Requires=vg-sync-ids.service
+
+[Timer]
+Unit=vg-sync-ids.service
+OnCalendar=*-*-* *:*:00
+
+[Install]
+WantedBy=timers.target

@@ -16,7 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/vpngen/ministry/internal/kdlib"
+	sshVg "github.com/vpngen/ministry/internal/vpngine/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -115,7 +115,7 @@ func main() {
 		log.Fatalf("Can't read configs: %s\n", err)
 	}
 
-	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
+	sshconf, err := sshVg.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVg.SSHDefaultTimeOut)
 	if err != nil {
 		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
@@ -232,7 +232,7 @@ func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *UpdatesPack
 		return fmt.Errorf("stdin pipe: %w", err)
 	}
 
-	if err := session.Start("/home/vgstats/syncids -ch sync"); err != nil {
+	if err := session.Start("sync_ids -ch sync"); err != nil {
 		return fmt.Errorf("start: %w", err)
 	}
 
@@ -566,7 +566,7 @@ func fetchLastUpdates(sshConfig *ssh.ClientConfig, addr string) (UpdateTimeResul
 	session.Stdout = &b
 	session.Stderr = &e
 
-	cmd := "/home/vgstats/syncids -ch lastupdate"
+	cmd := "sync_ids -ch lastupdate"
 	if err := session.Run(cmd); err != nil {
 		fmt.Fprintf(os.Stderr, "session errors:\n%s\n", e.String())
 
@@ -625,7 +625,7 @@ func readConfigs() (string, string, string, string, error) {
 		headSchema = defaultHeadSchema
 	}
 
-	sshKeyFilename, err := kdlib.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+	sshKeyFilename, err := sshVg.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}

@@ -27,7 +27,7 @@ import (
 	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/keydesk/keydesk"
 	"github.com/vpngen/ministry"
-	"github.com/vpngen/ministry/internal/kdlib"
+	sshVng "github.com/vpngen/ministry/internal/vpngine/ssh"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"github.com/vpngen/wordsgens/seedgenerator"
 	"golang.org/x/crypto/ssh"
@@ -198,7 +198,7 @@ func main() {
 		fatal(w, jout, "Can't read configs: %s\n", err)
 	}
 
-	sshconf, err := kdlib.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, kdlib.SSHDefaultTimeOut)
+	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
@@ -597,7 +597,7 @@ func readConfigs() (string, string, string, error) {
 		brigadesSchema = defaultBrigadesSchema
 	}
 
-	sshKeyFilename, err := kdlib.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
 		return "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}

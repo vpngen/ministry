@@ -1,4 +1,4 @@
-package kdlib
+package ssh
 
 import (
 	"errors"

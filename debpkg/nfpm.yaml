@@ -28,6 +28,16 @@ contents:
     owner: root
     group: root
 
+- src: ministry/debpkg/src/vg-head-stats.env.sample
+  dst: /etc/vgdept/vg-head-stats.env.sample
+  file_info:
+    mode: 0440
+    owner: vg_head_stats
+    group: vg_head_stats
+
+- dst: /etc/vgdept/vg-head-stats.env
+  type: ghost
+
 - dst: /opt/vg-head-vpnapi
   type: dir
   file_info:
@@ -155,6 +165,19 @@ contents:
 
 - src: ministry/sql
   dst: /usr/share/vg-head/sql
+
+- src: ministry/systemd/vg-sync-ids.timer
+  dst: /etc/systemd/system/vg-sync-ids.timer
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-sync-ids.service
+  dst: /etc/systemd/system/vg-sync-ids.service
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
 
 overrides:
   deb:

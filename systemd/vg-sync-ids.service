@@ -1,0 +1,14 @@
+[Unit]
+Description=Sync brigades ids with stats server
+Wants=vg-sync-ids.timer
+
+[Service]
+Type=oneshot
+User=vg_head_stats
+Group=vg_head_stats
+EnvironmentFile=/etc/vgdept/vg-head-stats.env
+WorkingDirectory=/home/vg_head_stats
+ExecStart=/opt/vg-head-stats/syncstats -a ${VG_STATS_SERVER}
+
+[Install]
+WantedBy=multi-user.target

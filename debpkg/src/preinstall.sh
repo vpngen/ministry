@@ -38,8 +38,6 @@ cleanInstall() {
 
         # Create new users
         create_users
-
-
 }
 
 upgrade() {
@@ -48,6 +46,8 @@ upgrade() {
         # Create new users
         create_users
 
+        systemctl stop vg-sync-ids.timer ||:
+        systemctl stop vg-sync-ids.service ||:
 }
 
 # Step 2, check if this is a clean install or an upgrade

@@ -4,6 +4,7 @@ ETCDIR="${HOME}/.ssh"
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"head"}
 USERNAME="_valera_"
+REASON=${REASON:-"abandoned_deletion"}
 
 list=$(psql -d "${DBNAME}" -v ON_ERROR_STOP=yes -t -A --set schema_name="${SCHEMA}" <<EOF
 SELECT
@@ -61,6 +62,19 @@ EOF
 
         echo "Actions: ${actions}"
 
-        "$(dirname "$0")"/delete_brigadier.sh "${bid}"
-
+        psql -d "${DBNAME}" -q -t -A \
+                --set ON_ERROR_STOP=yes \
+                --set brigade_id="${bid}" \
+                --set reason="${REASON}" \
+                --set schema_name="${SCHEMA}" <<EOF
+BEGIN;
+        INSERT INTO :"schema_name".deleted_brigadiers (brigade_id, reason) VALUES (:'brigade_id',:'reason') ON CONFLICT DO NOTHING;
+        INSERT INTO :"schema_name".brigades_actions (brigade_id, event_name, event_info, event_time) VALUES (:'brigade_id', 'delete_brigade', :'reason', now() AT TIME ZONE 'UTC');
+COMMIT;
+EOF
+                rc=$?
+                if [ $rc -ne 0 ]; then
+                        echo "[-]         Something wrong with db: $rc"
+                        continue
+                fi
 done

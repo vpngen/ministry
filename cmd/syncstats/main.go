@@ -16,7 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	sshVg "github.com/vpngen/ministry/internal/vpngine/ssh"
+	sshVng "github.com/vpngen/ministry/internal/vpngine/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -115,7 +115,7 @@ func main() {
 		log.Fatalf("Can't read configs: %s\n", err)
 	}
 
-	sshconf, err := sshVg.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVg.SSHDefaultTimeOut)
+	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
 	if err != nil {
 		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
@@ -625,7 +625,7 @@ func readConfigs() (string, string, string, string, error) {
 		headSchema = defaultHeadSchema
 	}
 
-	sshKeyFilename, err := sshVg.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}

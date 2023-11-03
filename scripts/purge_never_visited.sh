@@ -76,7 +76,12 @@ realms=$(psql -d "${DBNAME}" \
         -q -t -A --csv \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" << EOF
-        SELECT realm_id,control_ip FROM :"schema_name".realms WHERE is_active = true;
+        SELECT 
+                realm_id,control_ip 
+        FROM 
+                :"schema_name".realms 
+        WHERE 
+                is_active = true;
 EOF
 )
 

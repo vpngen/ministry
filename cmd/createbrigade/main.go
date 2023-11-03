@@ -81,6 +81,7 @@ const (
 			WHERE
 				p.is_active=true
 				AND r.is_active=true
+				AND r.open_for_regs=true
 				AND r.free_slots>0
 				AND t.token=$4
 			ORDER BY RANDOM() LIMIT 1

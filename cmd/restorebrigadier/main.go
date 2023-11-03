@@ -128,7 +128,7 @@ func main() {
 
 	key := seedgenerator.SeedFromSaltMnemonics(mnemo, seedExtra, salt)
 
-	id, del, delTime, delReason, addr, err := checkKey(db, schema, name, key)
+	id, del, delTime, delReason, isActive, openForRegs, addr, err := checkKey(db, schema, name, key)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			fmt.Fprintln(w, "NOTFOUND")
@@ -148,6 +148,12 @@ func main() {
 			return
 		}
 
+		if !isActive || !openForRegs {
+			fatal(w, jout, "%s: Can't restore brigade: inactive or closed for regs\n", LogTag)
+
+			return
+		}
+
 		wgconfx, err = blessBrigade(db, schema, sshconf, id)
 		if err != nil {
 			fatal(w, jout, "%s: Can't bless brigade: %s", LogTag, err)
@@ -156,6 +162,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: ALIVE", LogTag)
 
 		if dryRun {
+			return
+		}
+
+		if !isActive {
+			fatal(w, jout, "%s: Can't replace brigade: inactive\n", LogTag)
+
 			return
 		}
 
@@ -427,14 +439,14 @@ VALUES
 	return wgconf, nil
 }
 
-func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, bool, time.Time, string, netip.Addr, error) {
+func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, bool, time.Time, string, bool, bool, netip.Addr, error) {
 	ctx := context.Background()
 	emptyTime := time.Time{}
 	emptyAddr := netip.Addr{}
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return uuid.Nil, false, emptyTime, "", emptyAddr, fmt.Errorf("begin: %w", err)
+		return uuid.Nil, false, emptyTime, "", false, false, emptyAddr, fmt.Errorf("begin: %w", err)
 	}
 
 	var (
@@ -443,12 +455,16 @@ func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, boo
 		controlIP      netip.Addr
 		deletedTime    pgtype.Timestamp
 		deletionReason pgtype.Text
+		isActive       bool
+		openForRegs    bool
 	)
 
 	sqlSaltByName := `SELECT
 		brigadiers.brigade_id,
 		brigadiers.brigadier,
 		realms.control_ip,
+		realms.is_active,
+		realms.open_for_regs,
 		deleted_brigadiers.deleted_at,
 		deleted_brigadiers.reason
 	FROM %s, %s, %s
@@ -477,21 +493,23 @@ func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, boo
 		&id,
 		&getName,
 		&controlIP,
+		&isActive,
+		&openForRegs,
 		&deletedTime,
 		&deletionReason,
 	)
 	if err != nil {
 		tx.Rollback(ctx)
 
-		return uuid.Nil, false, emptyTime, "", emptyAddr, fmt.Errorf("key query: %w", err)
+		return uuid.Nil, false, emptyTime, "", false, false, emptyAddr, fmt.Errorf("key query: %w", err)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return uuid.Nil, false, emptyTime, "", emptyAddr, fmt.Errorf("commit: %w", err)
+		return uuid.Nil, false, emptyTime, "", false, false, emptyAddr, fmt.Errorf("commit: %w", err)
 	}
 
-	return uuid.UUID(id.Bytes), deletedTime.Valid, deletedTime.Time, deletionReason.String, controlIP, nil
+	return uuid.UUID(id.Bytes), deletedTime.Valid, deletedTime.Time, deletionReason.String, isActive, openForRegs, controlIP, nil
 }
 
 func saltByName(db *pgxpool.Pool, schema, name string) ([]byte, error) {

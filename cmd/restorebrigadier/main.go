@@ -463,11 +463,11 @@ func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, boo
 		brigadiers.brigade_id,
 		brigadiers.brigadier,
 		realms.control_ip,
-		realms.is_active,
-		realms.open_for_regs,
+		(realms.is_active AND partners.is_active) as is_active,
+		(realms.open_for_regs AND partners.open_for_regs) as open_for_regs,
 		deleted_brigadiers.deleted_at,
 		deleted_brigadiers.reason
-	FROM %s, %s, %s
+	FROM %s, %s, %s, %s
 	LEFT JOIN %s ON 
 		brigadiers.brigade_id=deleted_brigadiers.brigade_id
 	WHERE
@@ -484,6 +484,7 @@ func checkKey(db *pgxpool.Pool, schema, name string, key []byte) (uuid.UUID, boo
 		fmt.Sprintf(sqlSaltByName,
 			(pgx.Identifier{schema, "brigadier_keys"}.Sanitize()),
 			(pgx.Identifier{schema, "realms"}.Sanitize()),
+			(pgx.Identifier{schema, "partners"}.Sanitize()),
 			(pgx.Identifier{schema, "brigadiers"}.Sanitize()),
 			(pgx.Identifier{schema, "deleted_brigadiers"}.Sanitize()),
 		),

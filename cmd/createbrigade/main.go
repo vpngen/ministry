@@ -80,6 +80,7 @@ const (
 				JOIN %s AS r ON r.realm_id=pr.realm_id          -- realms
 			WHERE
 				p.is_active=true
+				AND p.open_for_regs=true
 				AND r.is_active=true
 				AND r.open_for_regs=true
 				AND r.free_slots>0

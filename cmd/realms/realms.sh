@@ -175,7 +175,7 @@ deactivate_dc () {
 
         psql -qt -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
-        --set schema_name"${SCHEMA}" \
+        --set schema_name="${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF
 BEGIN;
         UPDATE 

@@ -4,7 +4,8 @@ remove() {
         printf "Pre Remove of a normal remove\n"
 
         printf "Stop the service unit\n"
-
+        systemctl stop --force vg-sync-ids.timer ||:
+        systemctl stop --force vg-sync-ids.service ||:
 }
 
 upgrade() {

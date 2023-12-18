@@ -23,6 +23,8 @@ printdef () {
         echo "    add  <realm_id> <realm_name> <control_ip>    # Add a realm"
         echo "    activate <realm_id>                           # Activate a realm"
         echo "    deactivate <realm_id>                         # Deactivate a realm"
+        echo "    regon <realm_id>                              # Allow new registrations for a realm"
+        echo "    regoff <realm_id>                             # Disallow new registrations for a realm"
         echo "    info <realm_id>                               # Show realm info"
         echo "    list                                          # List all realms"
         exit 1
@@ -45,7 +47,11 @@ add_dc () {
         --set realm_name="${realm_name}" \
         --set control_ip="${control_ip}" <<EOF
 BEGIN;
-        INSERT INTO :"schema_name".realms (realm_id,realm_name,control_ip,is_active,update_time) VALUES (:'realm_id', :'realm_name', :'control_ip', false, NOW());
+        INSERT INTO 
+                :"schema_name".realms 
+                (realm_id, realm_name, control_ip, is_active, open_for_regs, update_time) 
+        VALUES 
+                (:'realm_id', :'realm_name', :'control_ip', false, false, NOW() AT TIME ZONE 'UTC');
 COMMIT;
 EOF
         echo "Realm ${realm_id} added."
@@ -64,13 +70,18 @@ info_dc () {
         --set schema_name="${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF
 BEGIN;
-        SELECT * FROM :"schema_name".realms WHERE realm_id=:'realm_id';
+        SELECT 
+                * 
+        FROM 
+                :"schema_name".realms 
+        WHERE 
+                realm_id=:'realm_id';
 COMMIT;
 EOF
 }
 
 list_dc () {
-        psql -qt -d "${DBNAME}" \
+        psql -v -a -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
@@ -92,11 +103,66 @@ activate_dc () {
         --set schema_name="${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF
 BEGIN;
-        UPDATE :"schema_name".realms SET is_active=true, update_time=NOW() WHERE realm_id=:'realm_id';
+        UPDATE 
+                :"schema_name".realms 
+        SET 
+                is_active=true, update_time=NOW() AT TIME ZONE 'UTC' 
+        WHERE 
+                realm_id=:'realm_id';
 COMMIT;
 EOF
 
         echo "Realm ${realm_id} activated"
+}
+
+regson () {
+        realm_id="$1"
+        if [ -z "${realm_id}" ]; then
+                echo "Error: realm_id must be set" >&2
+
+                printdef
+        fi
+
+        psql -qt -d "${DBNAME}" \
+        --set ON_ERROR_STOP=yes \
+        --set schema_name="${SCHEMA}" \
+        --set realm_id="${realm_id}" <<EOF
+BEGIN;
+        UPDATE 
+                :"schema_name".realms 
+        SET 
+                open_for_regs=true, update_time=NOW() AT TIME ZONE 'UTC' 
+        WHERE 
+                realm_id=:'realm_id';
+COMMIT;
+EOF
+
+        echo "Realm ${realm_id} open for new registrations."
+}
+
+regsoff () {
+        realm_id="$1"
+        if [ -z "${realm_id}" ]; then
+                echo "Error: realm_id must be set" >&2
+
+                printdef
+        fi
+
+        psql -qt -d "${DBNAME}" \
+        --set ON_ERROR_STOP=yes \
+        --set schema_name="${SCHEMA}" \
+        --set realm_id="${realm_id}" <<EOF
+BEGIN;
+        UPDATE 
+                :"schema_name".realms 
+        SET 
+                open_for_regs=false, update_time=NOW() AT TIME ZONE 'UTC' 
+        WHERE 
+                realm_id=:'realm_id';
+COMMIT;
+EOF
+
+        echo "Realm ${realm_id} closed for new registrations."
 }
 
 deactivate_dc () {
@@ -109,10 +175,15 @@ deactivate_dc () {
 
         psql -qt -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
-        --set schema_name"${SCHEMA}" \
+        --set schema_name="${SCHEMA}" \
         --set realm_id="${realm_id}" <<EOF
 BEGIN;
-        UPDATE :"schema_name".realms SET is_active=false, update_time=NOW() AT TIME ZONE 'UTC' WHERE realm_id=:'realm_id';
+        UPDATE 
+                :"schema_name".realms 
+        SET 
+                is_active=false, update_time=NOW() AT TIME ZONE 'UTC' 
+        WHERE 
+                realm_id=:'realm_id';
 COMMIT;
 EOF
 
@@ -137,6 +208,12 @@ case "$opt" in
                 ;;
         deactivate)
                 deactivate_dc "$@"
+                ;;
+        regson)
+                regson "$@"
+                ;;
+        regsoff)
+                regsoff "$@"
                 ;;
         info)
                 info_dc "$@"

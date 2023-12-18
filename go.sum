@@ -213,8 +213,6 @@ github.com/vpngen/keydesk v1.3.13 h1:QUWONzkWcZMNcvvrwnvD9yVwPWMyzWOYSNOT7fzpF+Y
 github.com/vpngen/keydesk v1.3.13/go.mod h1:2fHZbDKVe5oKpx+dz7jd7RBxYBPTkEbmKaV2sI5s58Y=
 github.com/vpngen/vpngine v0.0.3 h1:l0S28WoJmyDNia8tLFFYNhfQQE67Oql1QKysvQou3aw=
 github.com/vpngen/vpngine v0.0.3/go.mod h1:6qCkgHFMAeD5prllkFZg6FWbkxeAhPA/qmK+DC5tQEQ=
-github.com/vpngen/wordsgens v1.0.1 h1:pqEyKnvPDuJqgWzF8oYDJ1oDbHR/kApPRYQ80BWc+Wo=
-github.com/vpngen/wordsgens v1.0.1/go.mod h1:MwR0TzA/9pHCBYy+o0mMZtxPnjlNH8/7KelERM40lp8=
 github.com/vpngen/wordsgens v1.0.2 h1:VxLk1TW2MRkEp93xIqwCmzVoiAQJ+4+zq/Fp4H5oUBQ=
 github.com/vpngen/wordsgens v1.0.2/go.mod h1:MwR0TzA/9pHCBYy+o0mMZtxPnjlNH8/7KelERM40lp8=
 github.com/xdg-go/pbkdf2 v1.0.0/go.mod h1:jrpuAogTd400dnrH08LKmI/xc1MbPOebTwRqcT5RDeI=

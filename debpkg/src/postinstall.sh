@@ -70,6 +70,8 @@ cleanInstall() {
 
     	printf "Reload the service unit from disk\n"
     	systemctl daemon-reload ||:
+        systemctl enable vg-sync-ids.timer ||:
+	systemctl start vg-sync-ids.timer ||:
 }
 
 upgrade() {
@@ -79,6 +81,8 @@ upgrade() {
 
     	printf "Reload the service unit from disk\n"
     	systemctl daemon-reload ||:
+        systemctl enable vg-sync-ids.timer ||:
+	systemctl start vg-sync-ids.timer ||:
 }
 
 # Step 2, check if this is a clean install or an upgrade

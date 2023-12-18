@@ -20,7 +20,7 @@ if [ -z "${SSH_KEY}" ]; then
         fi
 fi
 
-get_realms_free_slot () {
+if [ $# -eq 2 ]; then
         REALM_ID="${1}"
         CONTROL_IP="${2}"
 
@@ -59,7 +59,9 @@ EOF
                 echo "[-]         Something wrong with db: $rc"
                 exit 1
         fi
-}
+
+        exit 0
+fi
 
 realms=$(psql -d "${DBNAME}" \
         -q -t -A --csv \
@@ -74,5 +76,16 @@ for realm in ${realms}; do
         control_ip=$(echo "${realm}" | cut -d ',' -f 2)
 
         echo "[+]     Realm: ${realm_id} control_ip: ${control_ip}"
-        get_realms_free_slot "${realm_id}" "${control_ip}"
+
+        spinlock_filename="${realm_id}.lock"
+        if [ -d "${HOME}" ] && [ -w "${HOME}" ]; then
+                spinlock="${HOME}/${spinlock_filename}"
+        elif [ -d "/tmp" ] && [ -w "/tmp" ]; then
+                spinlock="/tmp/${spinlock_filename}"
+        else
+                echo "[-]         Can't create spinlock file"
+                exit 1
+        fi
+
+        flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${control_ip}" "${realm_id}"
 done

@@ -29,6 +29,13 @@ echo "GET WASTED: ${CMD}"
 
 purge_per_realm () {
         REALM="${1}"
+        realm_id="${2}"
+        
+        if [ -z "${REALM}" ]; then
+                echo "[!]         Realm is empty"
+                exit 1
+        fi
+
         wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${CMD}")
         rc=$?
         if [ $rc -ne 0 ]; then
@@ -36,29 +43,39 @@ purge_per_realm () {
                 exit 1
         fi
 
+        # TODO: same code bi purge never visited
         for bid in ${wasted}; do
                 echo "delete ${bid}"
 
-                psql -d "${DBNAME}" -q -t -A \
+                count=$(psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${bid}" \
-                --set reason="${REASON}" \
                 --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
-        INSERT INTO :"schema_name".deleted_brigadiers (brigade_id, reason) VALUES (:'brigade_id',:'reason') ON CONFLICT DO NOTHING;
-        INSERT INTO :"schema_name".brigades_actions (brigade_id, event_name, event_info, event_time) VALUES (:'brigade_id', 'delete_brigade', :'reason', now() AT TIME ZONE 'UTC');
+        SELECT 
+                COUNT(*)
+        FROM 
+                :"schema_name".brigadier_realms
+        WHERE 
+                brigade_id = :'brigade_id'
+                AND draft = false
+                AND featured = false
 COMMIT;
 EOF
+)
                 rc=$?
                 if [ $rc -ne 0 ]; then
                         echo "[-]         Something wrong with db: $rc"
                         continue
                 fi
 
-                del="delbrigade -uuid ${bid}"
-                echo "${del}"
+                if [ -n "${count}" ] && [ "${count}" -ne 0 ]; then
+                        echo "[-]         Brigade is not ready for deletion"
+                        continue
+                fi
 
-                ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${del}"
+                "$(dirname "$0")"/delete_brigadier.sh "${bid}" "${REASON}"
+
                 rc=$?
                 if [ $rc -ne 0 ]; then
                         echo "[-]         Something wrong with deletion: $rc"
@@ -71,7 +88,12 @@ realms=$(psql -d "${DBNAME}" \
         -q -t -A --csv \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" << EOF
-        SELECT realm_id,control_ip FROM :"schema_name".realms WHERE is_active = true;
+        SELECT 
+                realm_id,control_ip 
+        FROM 
+                :"schema_name".realms 
+        WHERE 
+                is_active = true;
 EOF
 )
 
@@ -80,5 +102,5 @@ for realm in ${realms}; do
         control_ip=$(echo "${realm}" | cut -d ',' -f 2)
 
         echo "[+]     Realm: ${realm_id} control_ip: ${control_ip}"
-        purge_per_realm "${control_ip}"
+        purge_per_realm "${control_ip}" "${realm_id}"
 done

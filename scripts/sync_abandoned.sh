@@ -12,10 +12,22 @@ SELECT
         r.control_ip
 FROM
         :"schema_name".brigadiers b
-        JOIN :"schema_name".realms r ON b.realm_id=r.realm_id
+        JOIN :"schema_name".brigadier_realms br ON b.brigade_id=br.brigade_id
+        JOIN :"schema_name".realms r ON br.realm_id=r.realm_id
         LEFT JOIN :"schema_name".deleted_brigadiers d ON b.brigade_id=d.brigade_id
 WHERE
-        d.deleted_at IS NULL
+        br.featured = true
+        AND d.brigade_id IS NULL
+        AND (
+                SELECT
+                        COUNT(*)
+                FROM
+                        :"schema_name".brigadier_realms
+                WHERE
+                        brigade_id = b.brigade_id
+                        AND draft = false
+                        AND featured = false
+        ) = 0
 EOF
 )
 
@@ -25,6 +37,7 @@ for line in ${list} ; do
 
         check="checkbrigade -uuid ${bid}"
 
+        # TODO: check strict error
         out=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${ETCDIR}"/id_ed25519 -o StrictHostKeyChecking=no "${USERNAME}@${realm}" "${check}")
         rc=$?
         if [ $rc -eq 0 ]; then
@@ -62,19 +75,5 @@ EOF
 
         echo "Actions: ${actions}"
 
-        psql -d "${DBNAME}" -q -t -A \
-                --set ON_ERROR_STOP=yes \
-                --set brigade_id="${bid}" \
-                --set reason="${REASON}" \
-                --set schema_name="${SCHEMA}" <<EOF
-BEGIN;
-        INSERT INTO :"schema_name".deleted_brigadiers (brigade_id, reason) VALUES (:'brigade_id',:'reason') ON CONFLICT DO NOTHING;
-        INSERT INTO :"schema_name".brigades_actions (brigade_id, event_name, event_info, event_time) VALUES (:'brigade_id', 'delete_brigade', :'reason', now() AT TIME ZONE 'UTC');
-COMMIT;
-EOF
-                rc=$?
-                if [ $rc -ne 0 ]; then
-                        echo "[-]         Something wrong with db: $rc"
-                        continue
-                fi
+        "$(dirname "$0")"/delete_brigadier.sh "${bid}" "${REASON}"   
 done

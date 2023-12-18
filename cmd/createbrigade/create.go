@@ -16,9 +16,10 @@ import (
 const maxCollisionAttemts = 1000
 
 var (
-	errEmptyAccessToken = errors.New("token not specified")
+	ErrEmptyAccessToken = errors.New("token not specified")
 	ErrAccessDenied     = errors.New("access denied")
 	ErrMaxCollisions    = errors.New("max collision attempts")
+	ErrLabelTooLong     = errors.New("label too long")
 )
 
 const brigadeCreationType = "ssh_api"
@@ -163,8 +164,6 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 				case "brigadiers_brigadier_key":
 					continue
 				default:
-					tx.Rollback(ctx)
-
 					return "", nil, fmt.Errorf("create brigadier: %w", pgErr)
 				}
 			}
@@ -205,8 +204,27 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 	return id, nil
 }
 
+func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
+	id uuid.UUID, label string,
+) error {
+	sql := `
+	INSERT INTO
+		%s (brigade_id,	label)
+	VALUES
+		($1, $2)
+	`
+	if _, err := tx.Exec(ctx,
+		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),
+		id, label,
+	); err != nil {
+		return fmt.Errorf("store label: %w", err)
+	}
+
+	return nil
+}
+
 func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
-	partnerID uuid.UUID, creationInfo string,
+	partnerID uuid.UUID, creationInfo string, label string,
 ) (uuid.UUID, string, string, *namesgenerator.Person, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -236,6 +254,10 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 
 	if err := storeBrigadierPartner(ctx, tx, schema, id, partnerID); err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier partner: %w", err)
+	}
+
+	if err := storeBrigadierLabel(ctx, tx, schema, id, label); err != nil {
+		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 
 	err = tx.Commit(ctx)

@@ -33,10 +33,14 @@ const (
 	defaultBrigadesSchema = "head"
 )
 
+const (
+	maxStartLabelLen = 64
+)
+
 func main() {
 	var w io.WriteCloser
 
-	chunked, jout, token, err := parseArgs()
+	chunked, jout, token, label, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -75,7 +79,7 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType)
+	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, label)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
@@ -179,22 +183,27 @@ func readConfigs() (string, string, string, error) {
 	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
-func parseArgs() (bool, bool, []byte, error) {
+func parseArgs() (bool, bool, []byte, string, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 	jout := flag.Bool("j", false, "json output")
+	label := flag.String("l", "", "label")
 
 	flag.Parse()
 
+	if *label != "" && len(*label) > maxStartLabelLen {
+		return false, false, nil, "", fmt.Errorf("label: %w", ErrLabelTooLong)
+	}
+
 	a := flag.Args()
 	if len(a) < 1 {
-		return false, false, nil, fmt.Errorf("access token: %w", errEmptyAccessToken)
+		return false, false, nil, "", fmt.Errorf("access token: %w", ErrEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return false, false, nil, fmt.Errorf("access token: %w", err)
+		return false, false, nil, "", fmt.Errorf("access token: %w", err)
 	}
 
-	return *chunked, *jout, token, nil
+	return *chunked, *jout, token, *label, nil
 }

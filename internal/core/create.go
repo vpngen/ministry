@@ -59,7 +59,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 
 		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, brigadeID, fullname, person)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, ErrAttemptLimitExceeded) {
 				continue
 			}
 
@@ -69,6 +69,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 		if vpnconf.Status != keydesk.AnswerStatusSuccess {
 			continue
 		}
+
 		if err := promoteBrigadierRealm(ctx, db, schema, brigadeID, realmID); err != nil {
 			return nil, fmt.Errorf("promote realm: %w", err)
 		}
@@ -238,6 +239,8 @@ func storeBrigadierDraftRealm(ctx context.Context, tx pgx.Tx, schema string,
 func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 	brigadeID uuid.UUID, realmID uuid.UUID,
 ) error {
+	fmt.Fprintf(os.Stderr, "promoteBrigadierRealm: %s %s\n", brigadeID, realmID)
+
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
@@ -280,8 +283,49 @@ func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 		return fmt.Errorf("insert action: %w", err)
 	}
 
+	if err := undeleteBrigadier(ctx, tx, schema, brigadeID); err != nil {
+		return fmt.Errorf("undelete: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+func undeleteBrigadier(ctx context.Context, tx pgx.Tx, schema string, brigadeID uuid.UUID) error {
+	sqlUndeleteBrigadier := `
+	DELETE FROM
+		%s
+	WHERE
+		brigade_id=$1
+	`
+
+	comm, err := tx.Exec(ctx,
+		fmt.Sprintf(sqlUndeleteBrigadier, (pgx.Identifier{schema, "deleted_brigadiers"}.Sanitize())),
+		brigadeID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete: %w", err)
+	}
+
+	event := "create_brigade"
+	if comm.RowsAffected() > 0 {
+		event = "restore_brigade"
+	}
+
+	sqlCreateRealmAction := `
+	INSERT INTO
+		%s (brigade_id, event_name, event_info, event_time)
+	VALUES
+		($1, $2, '', NOW() AT TIME ZONE 'UTC')
+	`
+	if _, err := tx.Exec(ctx,
+		fmt.Sprintf(sqlCreateRealmAction, (pgx.Identifier{schema, "brigades_actions"}.Sanitize())),
+		brigadeID, event,
+	); err != nil {
+		return fmt.Errorf("insert action: %w", err)
 	}
 
 	return nil
@@ -298,7 +342,7 @@ func isBrigadeLocated(ctx context.Context, tx pgx.Tx, schema string,
 		JOIN %s AS r ON r.realm_id=br.realm_id
 	WHERE
 		br.brigade_id=$1
-		AND r.draft = false
+		AND br.draft = false
 	`
 
 	var n int
@@ -316,6 +360,10 @@ func isBrigadeLocated(ctx context.Context, tx pgx.Tx, schema string,
 		return false, fmt.Errorf("select: %w", err)
 	}
 
+	if n == 0 {
+		return false, nil
+	}
+
 	return true, nil
 }
 
@@ -330,7 +378,7 @@ func selectBrigadeRealm(ctx context.Context, tx pgx.Tx, schema string,
 		JOIN %s AS bp ON bp.brigade_id=b.brigade_id 	-- brigadier_partners
 		JOIN %s AS pr ON pr.partner_id = bp.partner_id	-- partners_realms
 		JOIN %s AS r ON r.realm_id=pr.realm_id		-- realms
-		LEFT JOIN %s AS br ON br.realm_id=pr.realm_id	-- brigadier_realms
+		LEFT JOIN %s AS br ON br.realm_id=pr.realm_id AND br.brigade_id=b.brigade_id	-- brigadier_realms
 	WHERE
 		b.brigade_id=$1
 		AND pr.partner_id=$2

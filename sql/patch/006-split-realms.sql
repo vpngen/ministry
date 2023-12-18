@@ -53,13 +53,14 @@ END$$;
 -- Step 1: Migrate existing realm_id data to the new brigadier_realms table.
 INSERT INTO :"schema_name".brigadier_realms (brigade_id, realm_id, featured, draft)
 SELECT
-        brigade_id, realm_id, True, False
+        bi.brigade_id, bi.realm_id, True, False
 FROM
-        :"schema_name".brigadiers_ids
+        :"schema_name".brigadiers_ids bi
+        LEFT JOIN :"schema_name".deleted_brigadiers db ON bi.brigade_id = db.brigade_id
 WHERE
-        deleted_at IS NULL
+        db.brigade_id IS NULL
 AND 
-        purged_at IS NULL
+        bi.purged_at IS NULL
 ON CONFLICT DO NOTHING;
 
 -- Step 2: Migrate existing realm_id data to the new brigadier_realms_actions table.
@@ -89,23 +90,25 @@ ON CONFLICT DO NOTHING;
 -- All deleted brigadiers are assigned to the realm with fake "remove" track.
 INSERT INTO :"schema_name".brigadier_realms_actions (brigade_id, realm_id, event_time, event_name, event_info)
 SELECT
-        brigade_id, realm_id, deleted_at, 'remove', ''
+       bi.brigade_id, bi.realm_id, bi.deleted_at, 'remove', ''
 FROM
-        :"schema_name".brigadiers_ids
+        :"schema_name".brigadiers_ids bi
+        LEFT JOIN :"schema_name".deleted_brigadiers db ON bi.brigade_id = db.brigade_id
 WHERE
-        deleted_at IS NOT NULL
+        db.brigade_id IS NOT NULL
 ON CONFLICT DO NOTHING;
 
 -- All purged brigadiers without delete track are assigned to the realm with fake "remove" track.
 INSERT INTO :"schema_name".brigadier_realms_actions (brigade_id, realm_id, event_time, event_name, event_info)
 SELECT
-        brigade_id, realm_id, purged_at, 'remove', ''
+        bi.brigade_id, bi.realm_id, bi.purged_at, 'remove', ''
 FROM
-        :"schema_name".brigadiers_ids
+        :"schema_name".brigadiers_ids bi
+        LEFT JOIN :"schema_name".deleted_brigadiers db ON bi.brigade_id = db.brigade_id
 WHERE
-        purged_at IS NOT NULL
+        bi.purged_at IS NOT NULL
 AND
-        deleted_at IS NULL
+        db.brigade_id IS NULL
 ON CONFLICT DO NOTHING;
 
 

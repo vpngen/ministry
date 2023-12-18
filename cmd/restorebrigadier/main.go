@@ -96,10 +96,10 @@ func main() {
 
 		vpnconf, err = core.ComposeBrigade(ctx, db, schema, sshconf, LogTag, partnerID, brigadeID, name, person)
 		if err != nil {
-			fatal(w, jout, "%s: Can't bless brigade: %s", LogTag, err)
+			fatal(w, jout, "%s: Can't bless brigade: %s\n", LogTag, err)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "%s: ALIVE", LogTag)
+		fmt.Fprintf(os.Stderr, "%s: ALIVE\n", LogTag)
 
 		if dryRun {
 			return
@@ -107,7 +107,7 @@ func main() {
 
 		vpnconf, err = core.ReplaceBrigadier(ctx, db, schema, LogTag, sshconf, brigadeID)
 		if err != nil {
-			fatal(w, jout, "%s: Can't replace brigade: %s", LogTag, err)
+			fatal(w, jout, "%s: Can't replace brigade: %s\n", LogTag, err)
 		}
 	}
 

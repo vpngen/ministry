@@ -87,7 +87,7 @@ brigadier_realms=$(psql -d "${DBNAME}" \
         WHERE 
                 r.is_active = true
                 AND br.draft = true
-                AND br.updated_time < NOW() AT TIME ZONE 'UTC' - interval '10 minutes';
+                AND br.update_time < NOW() AT TIME ZONE 'UTC' - interval '10 minutes';
 EOF
 )
 

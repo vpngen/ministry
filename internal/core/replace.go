@@ -65,7 +65,7 @@ func fetchBrigadeRealm(ctx context.Context, tx pgx.Tx, schema string, brigadeID 
 	WHERE
 		b.brigade_id=$1
 	AND
-		r.featured IS TRUE
+		br.featured IS TRUE
 	`
 
 	var (

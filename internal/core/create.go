@@ -224,7 +224,7 @@ func storeBrigadierDraftRealm(ctx context.Context, tx pgx.Tx, schema string,
 	INSERT INTO
 		%s (brigade_id, realm_id, event_name, event_info, event_time)
 	VALUES
-		($1, $2, 'draft', '', NOW() AT TIME ZONE 'UTC')
+		($1, $2, 'order', 'draft', NOW() AT TIME ZONE 'UTC')
 	`
 	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(sqlCreateRealmAction, (pgx.Identifier{schema, "brigadier_realms_actions"}.Sanitize())),

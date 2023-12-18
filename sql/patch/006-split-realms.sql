@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS :"schema_name".brigadier_realms_actions (
         brigade_id          uuid NOT NULL,
         realm_id            uuid NOT NULL,
         event_time          timestamp without time zone NOT NULL,
-        event_name          text NOT NULL, -- 'order', 'compose', 'modify', 'remove'
-        event_info          text NOT NULL, -- modify: 'promote', 'retire'
+        event_name          text NOT NULL, -- 'order', 'modify', 'remove'
+        event_info          text NOT NULL, --  modify: 'compose', 'promote', 'retire'
         update_time         timestamp without time zone NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
         FOREIGN KEY (brigade_id) REFERENCES :"schema_name".brigadiers_ids (brigade_id),
         FOREIGN KEY (realm_id) REFERENCES :"schema_name".realms (realm_id),
@@ -68,21 +68,14 @@ ON CONFLICT DO NOTHING;
 -- All current brigadiers are assigned to the realm with fake "order -> compose -> modify" track.
 INSERT INTO :"schema_name".brigadier_realms_actions (brigade_id, realm_id, event_time, event_name, event_info)
 SELECT
-        brigade_id, realm_id, created_at, 'order', ''
+        brigade_id, realm_id, created_at, 'order', 'draft'
 FROM
         :"schema_name".brigadiers_ids
 ON CONFLICT DO NOTHING;
 
 INSERT INTO :"schema_name".brigadier_realms_actions (brigade_id, realm_id, event_time, event_name, event_info)
 SELECT
-        brigade_id, realm_id, created_at, 'compose', ''
-FROM
-        :"schema_name".brigadiers_ids
-ON CONFLICT DO NOTHING;
-
-INSERT INTO :"schema_name".brigadier_realms_actions (brigade_id, realm_id, event_time, event_name, event_info)
-SELECT
-        brigade_id, realm_id, created_at, 'modify', 'promote'
+        brigade_id, realm_id, created_at + INTERVAL '10 second', 'modify', 'promote'
 FROM
         :"schema_name".brigadiers_ids
 ON CONFLICT DO NOTHING;
@@ -101,7 +94,7 @@ ON CONFLICT DO NOTHING;
 -- All purged brigadiers without delete track are assigned to the realm with fake "remove" track.
 INSERT INTO :"schema_name".brigadier_realms_actions (brigade_id, realm_id, event_time, event_name, event_info)
 SELECT
-        bi.brigade_id, bi.realm_id, bi.purged_at, 'remove', ''
+        bi.brigade_id, bi.realm_id, bi.deleted_at, 'remove', ''
 FROM
         :"schema_name".brigadiers_ids bi
         LEFT JOIN :"schema_name".deleted_brigadiers db ON bi.brigade_id = db.brigade_id
@@ -111,6 +104,15 @@ AND
         db.brigade_id IS NULL
 ON CONFLICT DO NOTHING;
 
+-- All purged brigadiers.
+INSERT INTO :"schema_name".brigades_actions (brigade_id, event_name, event_info, event_time) 
+SELECT
+        :'brigade_id', 'purge_brigade', 'expired', bi.purged_at
+FROM
+        :"schema_name".brigadiers_ids bi
+WHERE
+        bi.purged_at IS NOT NULL
+ON CONFLICT DO NOTHING;
 
 -- Step 3: Add the realm_id column to the delete_brigadiers table.
 ALTER TABLE :"schema_name".deleted_brigadiers ADD COLUMN IF NOT EXISTS realm_id uuid DEFAULT NULL;

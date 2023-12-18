@@ -61,6 +61,7 @@ BEGIN
                 EXECUTE 'DELETE FROM "${SCHEMA}".deleted_brigadiers WHERE deleted_brigadiers.brigade_id=' || quote_literal(r.id);
                 EXECUTE 'DELETE FROM "${SCHEMA}".brigadiers WHERE brigadiers.brigade_id=' || quote_literal(r.id);
                 EXECUTE 'UPDATE head.brigadiers_ids SET purged_at = NOW() AT TIME ZONE ''UTC'' WHERE brigade_id = ' || quote_literal(r.id);
+                EXECUTE 'INSERT INTO "${SCHEMA}".brigades_actions (brigade_id, event_name, event_info, event_time) VALUES (' || quote_literal(r.id) || ', ''purge_brigade'', ''expired'')';
         END LOOP;
 
 END\$purge\$;

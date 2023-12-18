@@ -81,7 +81,7 @@ EOF
 }
 
 list_dc () {
-        psql -qt -d "${DBNAME}" \
+        psql -v -a -d "${DBNAME}" \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" <<EOF
 BEGIN;

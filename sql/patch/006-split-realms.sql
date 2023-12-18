@@ -107,7 +107,7 @@ ON CONFLICT DO NOTHING;
 -- All purged brigadiers.
 INSERT INTO :"schema_name".brigades_actions (brigade_id, event_name, event_info, event_time) 
 SELECT
-        :'brigade_id', 'purge_brigade', 'expired', bi.purged_at
+        bi.brigade_id, 'purge_brigade', 'expired', bi.purged_at
 FROM
         :"schema_name".brigadiers_ids bi
 WHERE

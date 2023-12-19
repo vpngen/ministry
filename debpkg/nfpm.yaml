@@ -74,6 +74,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: ministry/scripts/purge_draft.sh
+  dst: /opt/vg-head-vpnapi/purge_draft.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: ministry/scripts/purge_inactive.sh
   dst: /opt/vg-head-vpnapi/purge_inactive.sh
   file_info:

@@ -89,5 +89,5 @@ for realm in ${realms}; do
                 exit 1
         fi
 
-        flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${control_ip}" "${realm_id}"
+        flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${realm_id}" "${control_ip}"
 done

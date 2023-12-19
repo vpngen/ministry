@@ -5,6 +5,8 @@ SCHEMA=${SCHEMA:-"head"}
 
 USERNAME=${USERNAME:-"_valera_"}
 
+LOCK_TIMEOUT=${LOCK_TIMEOUT:-"120"} # seconds
+
 if [ -z "${SSH_KEY}" ]; then
         if [ -s "${HOME}/.ssh/id_ed25519" ]; then
                 SSH_KEY="${HOME}/.ssh/id_ed25519"
@@ -51,7 +53,7 @@ if [ $# -eq 2 ]; then
                 --set free_slots="${num}" \
                 --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
-        UPDATE :"schema_name".realms SET free_slots = :'free_slots' WHERE realm_id = :'realm_id';
+                UPDATE :"schema_name".realms SET free_slots = :'free_slots' WHERE realm_id = :'realm_id';
 COMMIT;
 EOF
         rc=$?

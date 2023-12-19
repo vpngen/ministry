@@ -51,16 +51,14 @@ purge_per_realm () {
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${bid}" \
                 --set schema_name="${SCHEMA}" <<EOF
-BEGIN;
-        SELECT 
-                COUNT(*)
-        FROM 
-                :"schema_name".brigadier_realms
-        WHERE 
-                brigade_id = :'brigade_id'
-                AND draft = false
-                AND featured = false
-COMMIT;
+                SELECT 
+                        COUNT(*)
+                FROM 
+                        :"schema_name".brigadier_realms
+                WHERE 
+                        brigade_id = :'brigade_id'
+                        AND draft = false
+                        AND featured = false;
 EOF
 )
                 rc=$?

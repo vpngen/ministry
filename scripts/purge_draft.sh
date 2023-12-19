@@ -48,20 +48,20 @@ if [ "$#" -eq 2 ]; then
                 --set realm_id="${realm_id}" \
                 --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
-        DELETE FROM 
-                :"schema_name".brigadier_realms 
-        WHERE 
-                brigadier_realms.brigade_id=:'brigade_id' 
-        AND 
-                brigadier_realms.realm_id=:'realm_id'
-        AND
-                brigadier_realms.draft = true;
-
-        INSERT INTO 
-                :"schema_name".brigadier_realms_actions 
-                (brigade_id, realm_id, event_name, event_info, event_time)
-        VALUES 
-                (:'brigade_id', :'realm_id', 'remove', 'd', now() AT TIME ZONE 'UTC');
+                DELETE FROM 
+                        :"schema_name".brigadier_realms 
+                WHERE 
+                        brigadier_realms.brigade_id=:'brigade_id' 
+                AND 
+                        brigadier_realms.realm_id=:'realm_id'
+                AND
+                        brigadier_realms.draft = true;
+        
+                INSERT INTO 
+                        :"schema_name".brigadier_realms_actions 
+                        (brigade_id, realm_id, event_name, event_info, event_time)
+                VALUES 
+                        (:'brigade_id', :'realm_id', 'remove', 'd', now() AT TIME ZONE 'UTC');
 COMMIT;
 EOF
         fi

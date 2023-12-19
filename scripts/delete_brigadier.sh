@@ -52,25 +52,25 @@ if [ -z "${ACTION}" ]; then
                 --set brigade_id="${bid}" \
                 --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
-        SELECT 
-                r.realm_id 
-        FROM
-                :"schema_name".brigadier_realms br
-                JOIN :"schema_name".realms r ON br.realm_id = r.realm_id
-        WHERE 
-                br.brigade_id = :'brigade_id'
-                AND br.draft = false
-                AND br.featured = true
-                AND (
-                        SELECT 
-                                COUNT(*)
-                        FROM 
-                                :"schema_name".brigadier_realms
-                        WHERE 
-                                brigade_id = :'brigade_id'
-                                AND draft = false
-                                AND featured = false
-                ) = 0;
+                SELECT 
+                        r.realm_id 
+                FROM
+                        :"schema_name".brigadier_realms br
+                        JOIN :"schema_name".realms r ON br.realm_id = r.realm_id
+                WHERE 
+                        br.brigade_id = :'brigade_id'
+                        AND br.draft = false
+                        AND br.featured = true
+                        AND (
+                                SELECT 
+                                        COUNT(*)
+                                FROM 
+                                        :"schema_name".brigadier_realms
+                                WHERE 
+                                        brigade_id = :'brigade_id'
+                                        AND draft = false
+                                        AND featured = false
+                        ) = 0;
 COMMIT;
 EOF
         )

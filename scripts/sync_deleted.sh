@@ -5,6 +5,8 @@ DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"head"}
 USERNAME="_valera_"
 
+LOCK_TIMEOUT=${LOCK_TIMEOUT:-"120"} # seconds
+
 if [ $# -eq 1 ]; then
         info=$(psql -d "${DBNAME}" -v ON_ERROR_STOP=yes -t --set schema_name="${SCHEMA}" --set bid="${bid}" <<EOF
 SELECT

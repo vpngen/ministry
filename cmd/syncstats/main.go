@@ -40,10 +40,11 @@ type UpdateTimeResult struct {
 	Version                   int       `json:"version"`
 	UpdateTimeIDs             time.Time `json:"ids_update_time"`
 	UpdateTimePartners        time.Time `json:"partners_update_time"`
-	UpdateTimePartnersActions time.Time `json:"partners_actions_update_time"`
+	UpdateTimeActionsPartners time.Time `json:"actions_partners_update_time"`
 	UpdateTimeRealms          time.Time `json:"realms_update_time"`
-	UpdateTimeRealmsActions   time.Time `json:"realms_actions_update_time"`
+	UpdateTimeActionsRealms   time.Time `json:"actions_realms_update_time"`
 	UpdateTimeActions         time.Time `json:"actions_update_time"`
+	UpdateTimeStartLabels     time.Time `json:"start_labels_update_time"`
 }
 
 // IDsUpdate - is a struct of a table brigades_ids.
@@ -59,8 +60,8 @@ type PartnersUpdate struct {
 	UpdateTime  time.Time `json:"update_time"`
 }
 
-// PartnersActionsUpdate - is a struct of a table brigades_actions.
-type PartnersActionsUpdate struct {
+// ActionsPartnersUpdate - is a struct of a table brigades_actions.
+type ActionsPartnersUpdate struct {
 	BrigadeID  string    `json:"brigade_id"`
 	PartnerID  string    `json:"partner_id"`
 	EventName  string    `json:"event_name"`
@@ -76,8 +77,8 @@ type RealmsUpdate struct {
 	UpdateTime time.Time `json:"update_time"`
 }
 
-// RealmsActionsUpdate - is a struct of a table brigades_actions.
-type RealmsActionsUpdate struct {
+// ActionsRealmsUpdate - is a struct of a table brigades_actions.
+type ActionsRealmsUpdate struct {
 	BrigadeID  string    `json:"brigade_id"`
 	RealmID    string    `json:"realm_id"`
 	EventName  string    `json:"event_name"`
@@ -95,6 +96,13 @@ type ActionsUpdate struct {
 	UpdateTime time.Time `json:"update_time"`
 }
 
+// StartLabelsUpdate - is a struct of a table start_labels.
+type StartLabelsUpdate struct {
+	BrigadeID  string    `json:"brigade_id"`
+	Label      string    `json:"label"`
+	UpdateTime time.Time `json:"update_time"`
+}
+
 // UpdatesPackVersion - is a version of IDUpdatesPack struct.
 const UpdatesPackVersion = 1
 
@@ -102,11 +110,12 @@ const UpdatesPackVersion = 1
 type UpdatesPack struct {
 	Version                int                     `json:"version"`
 	RealmsUpdates          []RealmsUpdate          `json:"updates_realms"`
-	RealmsActionsUpdates   []RealmsActionsUpdate   `json:"updates_realms_actions"`
+	RealmsActionsUpdates   []ActionsRealmsUpdate   `json:"updates_realms_actions"`
 	PartnersUpdates        []PartnersUpdate        `json:"updates_partners"`
-	PartnersActionsUpdates []PartnersActionsUpdate `json:"updates_partners_actions"`
+	PartnersActionsUpdates []ActionsPartnersUpdate `json:"updates_partners_actions"`
 	IDsUpdates             []IDsUpdate             `json:"updates_ids"`
 	ActionsUpdates         []ActionsUpdate         `json:"updates_actions"`
+	StartLabelsUpdates     []StartLabelsUpdate     `json:"updates_start_labels"`
 	UpdatesFrom            UpdateTimeResult        `json:"updates_from"`
 	UpdateTime             time.Time               `json:"update_time"`
 }
@@ -191,19 +200,24 @@ func main() {
 
 	log.Println(actions)
 
-	realmsActions, err := syncRealmsActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeRealmsActions)
+	realmsActions, err := syncRealmsActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeActionsRealms)
 	if err != nil {
 		log.Fatalf("Sync realms actions: %s", err)
 	}
 
 	log.Println(realmsActions)
 
-	partnersActions, err := syncPartnersActions(sshconf, addr, db, schema, lastUpdates.UpdateTimePartnersActions)
+	partnersActions, err := syncPartnersActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeActionsPartners)
 	if err != nil {
 		log.Fatalf("Sync partners actions: %s", err)
 	}
 
 	log.Println(partnersActions)
+
+	startLabels, err := syncStartLabels(sshconf, addr, db, schema, lastUpdates.UpdateTimeStartLabels)
+	if err != nil {
+		log.Fatalf("Sync start labels: %s", err)
+	}
 
 	pack := &UpdatesPack{
 		Version:              UpdatesPackVersion,
@@ -212,6 +226,7 @@ func main() {
 		PartnersUpdates:      partners,
 		IDsUpdates:           ids,
 		ActionsUpdates:       actions,
+		StartLabelsUpdates:   startLabels,
 		UpdatesFrom:          lastUpdates,
 		UpdateTime:           time.Now().UTC(),
 	}
@@ -284,7 +299,7 @@ func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *UpdatesPack
 	return nil
 }
 
-func syncPartnersActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersActionsUpdate, error) {
+func syncPartnersActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsPartnersUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst partners actions updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryPartnersActionsUpdates(dbPool, schema, lastUpdate)
@@ -297,7 +312,7 @@ func syncPartnersActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpo
 	return updates, nil
 }
 
-func queryPartnersActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersActionsUpdate, error) {
+func queryPartnersActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsPartnersUpdate, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -330,7 +345,7 @@ func queryPartnersActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate tim
 	defer rows.Close()
 
 	var (
-		updates    = []PartnersActionsUpdate{}
+		updates    = []ActionsPartnersUpdate{}
 		brigadeID  string
 		partnerID  string
 		eventName  string
@@ -352,7 +367,7 @@ func queryPartnersActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate tim
 		func() error {
 			updates = append(
 				updates,
-				PartnersActionsUpdate{
+				ActionsPartnersUpdate{
 					BrigadeID:  brigadeID,
 					PartnerID:  partnerID,
 					EventName:  eventName,
@@ -372,7 +387,7 @@ func queryPartnersActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate tim
 	return updates, nil
 }
 
-func syncRealmsActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]RealmsActionsUpdate, error) {
+func syncRealmsActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsRealmsUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst realms actions updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryRealmsActionsUpdates(dbPool, schema, lastUpdate)
@@ -385,7 +400,7 @@ func syncRealmsActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool
 	return updates, nil
 }
 
-func queryRealmsActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]RealmsActionsUpdate, error) {
+func queryRealmsActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsRealmsUpdate, error) {
 	ctx := context.Background()
 
 	tx, err := db.Begin(ctx)
@@ -418,7 +433,7 @@ func queryRealmsActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.
 	defer rows.Close()
 
 	var (
-		updates    = []RealmsActionsUpdate{}
+		updates    = []ActionsRealmsUpdate{}
 		brigadeID  string
 		realmID    string
 		eventName  string
@@ -440,7 +455,7 @@ func queryRealmsActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.
 		func() error {
 			updates = append(
 				updates,
-				RealmsActionsUpdate{
+				ActionsRealmsUpdate{
 					BrigadeID:  brigadeID,
 					RealmID:    realmID,
 					EventName:  eventName,
@@ -728,7 +743,7 @@ func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]I
 
 	sqlGetIDs := `
 	SELECT
-		brigade_id, realm_id, partner_id, update_time
+		brigade_id, update_time
 	FROM 
 		%s 
 	WHERE 
@@ -751,8 +766,6 @@ func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]I
 	var (
 		updates    = []IDsUpdate{}
 		brigadeID  string
-		realmID    string
-		partnerID  string
 		updateTime time.Time
 	)
 
@@ -760,8 +773,6 @@ func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]I
 		rows,
 		[]any{
 			&brigadeID,
-			&realmID,
-			&partnerID,
 			&updateTime,
 		},
 		func() error {
@@ -769,6 +780,85 @@ func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]I
 				updates,
 				IDsUpdate{
 					BrigadeID:  brigadeID,
+					UpdateTime: updateTime,
+				},
+			)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("for each row: %w", err)
+	}
+
+	return updates, nil
+}
+
+func syncStartLabels(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]StartLabelsUpdate, error) {
+	fmt.Fprintf(os.Stderr, "Requst start labels updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
+
+	updates, err := queryStartLabelsUpdates(dbPool, schema, lastUpdate)
+	if err != nil {
+		return nil, fmt.Errorf("query start labels updates: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "start labels updates: %d\n", len(updates))
+
+	return updates, nil
+}
+
+func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]StartLabelsUpdate, error) {
+	ctx := context.Background()
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	sqlGetStartLabels := `
+	SELECT
+		brigade_id, label, update_time
+	FROM 
+		%s 
+	WHERE 
+		update_time >= $1
+	`
+	rows, err := tx.Query(
+		ctx,
+		fmt.Sprintf(
+			sqlGetStartLabels,
+			(pgx.Identifier{schema, "start_labels"}).Sanitize(),
+		),
+		lastUpdate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	defer rows.Close()
+
+	var (
+		updates    = []StartLabelsUpdate{}
+		brigadeID  string
+		label      string
+		updateTime time.Time
+	)
+
+	_, err = pgx.ForEachRow(
+		rows,
+		[]any{
+			&brigadeID,
+			&label,
+			&updateTime,
+		},
+		func() error {
+			updates = append(
+				updates,
+				StartLabelsUpdate{
+					BrigadeID:  brigadeID,
+					Label:      label,
 					UpdateTime: updateTime,
 				},
 			)

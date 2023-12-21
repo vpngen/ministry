@@ -422,7 +422,7 @@ func queryRealmsActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.
 		ctx,
 		fmt.Sprintf(
 			sqlGetActions,
-			(pgx.Identifier{schema, "brigadier_partners_actions"}).Sanitize(),
+			(pgx.Identifier{schema, "brigadier_realms_actions"}).Sanitize(),
 		),
 		lastUpdate,
 	)

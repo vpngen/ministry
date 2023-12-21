@@ -256,8 +256,10 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier partner: %w", err)
 	}
 
-	if err := storeBrigadierLabel(ctx, tx, schema, id, label); err != nil {
-		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
+	if label != "" {
+		if err := storeBrigadierLabel(ctx, tx, schema, id, label); err != nil {
+			return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
+		}
 	}
 
 	err = tx.Commit(ctx)

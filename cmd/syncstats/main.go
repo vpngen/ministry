@@ -220,15 +220,16 @@ func main() {
 	}
 
 	pack := &UpdatesPack{
-		Version:              UpdatesPackVersion,
-		RealmsUpdates:        realms,
-		RealmsActionsUpdates: realmsActions,
-		PartnersUpdates:      partners,
-		IDsUpdates:           ids,
-		ActionsUpdates:       actions,
-		StartLabelsUpdates:   startLabels,
-		UpdatesFrom:          lastUpdates,
-		UpdateTime:           time.Now().UTC(),
+		Version:                UpdatesPackVersion,
+		RealmsUpdates:          realms,
+		RealmsActionsUpdates:   realmsActions,
+		PartnersUpdates:        partners,
+		PartnersActionsUpdates: partnersActions,
+		IDsUpdates:             ids,
+		ActionsUpdates:         actions,
+		StartLabelsUpdates:     startLabels,
+		UpdatesFrom:            lastUpdates,
+		UpdateTime:             time.Now().UTC(),
 	}
 
 	if dryRun {

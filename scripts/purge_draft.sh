@@ -22,9 +22,10 @@ if [ -z "${SSH_KEY}" ]; then
         fi
 fi
 
-if [ "$#" -eq 2 ]; then
+if [ "$#" -eq 3 ]; then
         control_ip="${1}"
         brigade_id="${2}"
+        realm_id="${3}"
 
         echo "[+] Try to delete: Brigade: ${brigade_id} control_ip: ${control_ip}"
 
@@ -34,37 +35,37 @@ if [ "$#" -eq 2 ]; then
         out=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}" 2>&1)
         rc=$?
         if [ $rc -ne 0 ]; then
-                if ! echo "${out}" | grep -q "Can't get control ip" | grep -q "no rows in result set"; then
+                if [ -z "$(echo "${out}" | grep "Can't get control ip" | grep "no rows in result set")" ]; then
                         echo "[-]         Something wrong with deletion: $rc"
 
                         exit 1
                 fi
 
                 echo "[+]         Brigade not found"
+        fi
 
-                psql -d "${DBNAME}" -q -t -A \
+        psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${brigade_id}" \
                 --set realm_id="${realm_id}" \
                 --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
-                DELETE FROM 
-                        :"schema_name".brigadier_realms 
-                WHERE 
-                        brigadier_realms.brigade_id=:'brigade_id' 
-                AND 
+                DELETE FROM
+                        :"schema_name".brigadier_realms
+                WHERE
+                        brigadier_realms.brigade_id=:'brigade_id'
+                AND
                         brigadier_realms.realm_id=:'realm_id'
                 AND
                         brigadier_realms.draft = true;
-        
-                INSERT INTO 
-                        :"schema_name".brigadier_realms_actions 
+
+                INSERT INTO
+                        :"schema_name".brigadier_realms_actions
                         (brigade_id, realm_id, event_name, event_info, event_time)
-                VALUES 
+                VALUES
                         (:'brigade_id', :'realm_id', 'remove', 'd', now() AT TIME ZONE 'UTC');
 COMMIT;
 EOF
-        fi
 
         rc=$?
         if [ $rc -ne 0 ]; then
@@ -79,12 +80,12 @@ brigadier_realms=$(psql -d "${DBNAME}" \
         -q -t -A --csv \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" << EOF
-        SELECT 
+        SELECT
                 br.brigade_id, br.realm_id, r.control_ip
-        FROM 
+        FROM
                 :"schema_name".brigadier_realms br
                 JOIN :"schema_name".realms r ON br.realm_id = r.realm_id
-        WHERE 
+        WHERE
                 r.is_active = true
                 AND br.draft = true
                 AND br.update_time < NOW() AT TIME ZONE 'UTC' - interval '10 minutes';
@@ -108,5 +109,5 @@ for realm in ${brigadier_realms}; do
                 exit 1
         fi
 
-        flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${control_ip}" "${brigade_id}"
+        flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${control_ip}" "${brigade_id}" "${realm_id}"
 done

@@ -52,10 +52,8 @@ SELECT
         b.brigadier,
         b.created_at,
         b.realm_id,
-        p.partner
 FROM
         :"schema_name".brigadiers AS b
-        JOIN :"schema_name".partners p ON b.partner_id=p.partner_id
 WHERE
         b.brigade_id=:'bid'
 EOF

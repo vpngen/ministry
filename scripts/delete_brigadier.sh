@@ -22,10 +22,26 @@ if [ -z "${SSH_KEY}" ]; then
         fi
 fi
 
+VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
+if [ -s "${VIP_BRIGADES_FILE_HOME}" ]; then
+        VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_HOME}"
+fi
+
+VIP_BRIGADES_FILE_ETC="/etc/vgdept/vip_brigades_files"
+if [ -s "${VIP_BRIGADES_FILE_ETC}" ]; then
+        VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_ETC}"
+fi
+
 bid="${1}"
 
 if [ -z "${bid}" ]; then
         echo "Usage: $0 <brigade_id> [<reason>]"
+        exit 1
+fi
+
+#shellcheck disable=SC2086
+if grep -s -q -F "${bid}" ${VIP_BRIGADES_FILES}; then
+        echo "[-]         Brigade ${bid} is VIP"
         exit 1
 fi
 

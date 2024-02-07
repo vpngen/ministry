@@ -24,6 +24,16 @@ fi
 DAYS=${DAYS:-"1"}
 NUMS=${NUMS:-"1000"}
 
+VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
+if [ -s "${VIP_BRIGADES_FILE_HOME}" ]; then
+        VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_HOME}"
+fi
+
+VIP_BRIGADES_FILE_ETC="/etc/vgdept/vip_brigades_files"
+if [ -s "${VIP_BRIGADES_FILE_ETC}" ]; then
+        VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_ETC}"
+fi
+
 CMD="getwasted inactive -m ${DAYS} -n ${NUMS}"
 echo "GET WASTED: ${CMD}"
 
@@ -45,6 +55,12 @@ purge_per_realm () {
 
         # TODO: same code bi purge never visited
         for bid in ${wasted}; do
+                #shellcheck disable=SC2086
+                if grep -s -q -F "${bid}" ${VIP_BRIGADES_FILES}; then
+                        echo "[-]         Brigade ${bid} is VIP"
+                        continue
+                fi
+
                 echo "delete ${bid}"
 
                 count=$(psql -d "${DBNAME}" -q -t -A \

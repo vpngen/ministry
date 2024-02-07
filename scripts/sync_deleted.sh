@@ -53,7 +53,7 @@ SELECT
         d.brigade_id, r.realm_id, r.control_ip
 FROM
         :"schema_name".deleted_brigadiers d
-        JOIN :"schema_name".realms r ON b.realm_id=r.realm_id
+        JOIN :"schema_name".realms r ON d.realm_id=r.realm_id
 EOF
 )
 

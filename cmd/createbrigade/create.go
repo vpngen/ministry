@@ -157,7 +157,25 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 			return "", nil, fmt.Errorf("physics generate: %s", err)
 		}
 
-		if _, err = tx.Exec(ctx, sql, id, fullname, person); err != nil {
+		err = func() error {
+			stx, e := tx.Begin(ctx)
+			if e != nil {
+				return fmt.Errorf("sub begin: %w", e)
+			}
+
+			defer stx.Rollback(ctx)
+
+			if _, e := tx.Exec(ctx, sql, id, fullname, person); e != nil {
+				return fmt.Errorf("insert id: %w", e)
+			}
+
+			if e := stx.Commit(ctx); e != nil {
+				return fmt.Errorf("sub commit: %w", e)
+			}
+
+			return nil
+		}()
+		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
 				switch pgErr.ConstraintName {
@@ -185,7 +203,25 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 			return id, fmt.Errorf("create brigadier: %w: %d", ErrMaxCollisions, cnt)
 		}
 
-		if _, err := tx.Exec(ctx, sql, id); err != nil {
+		err := func() error {
+			stx, e := tx.Begin(ctx)
+			if e != nil {
+				return fmt.Errorf("sub begin: %w", e)
+			}
+
+			defer stx.Rollback(ctx)
+
+			if _, e := tx.Exec(ctx, sql, id); e != nil {
+				return fmt.Errorf("insert id: %w", e)
+			}
+
+			if e := stx.Commit(ctx); e != nil {
+				return fmt.Errorf("sub commit: %w", e)
+			}
+
+			return nil
+		}()
+		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
 				switch pgErr.ConstraintName {

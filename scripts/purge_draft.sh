@@ -35,6 +35,7 @@ if [ "$#" -eq 3 ]; then
         out=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}" 2>&1)
         rc=$?
         if [ $rc -ne 0 ]; then
+                # shellcheck disable=SC2143
                 if [ -z "$(echo "${out}" | grep "Can't get control ip" | grep "no rows in result set")" ]; then
                         echo "[-]         Something wrong with deletion: $rc"
 

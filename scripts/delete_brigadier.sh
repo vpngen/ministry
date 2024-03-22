@@ -62,43 +62,72 @@ elif [ "$l" -ne 36 ]; then
         exit 1
 fi
 
-if [ -z "${ACTION}" ]; then
-        realm_id=$(psql -d "${DBNAME}" -q -t -A \
+
+getrealm() {
+        brigade_id="${1}"
+
+        result=$(psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
-                --set brigade_id="${bid}" \
+                --set brigade_id="${brigade_id}" \
                 --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
-                SELECT 
-                        r.realm_id 
-                FROM
-                        :"schema_name".brigadier_realms br
-                        JOIN :"schema_name".realms r ON br.realm_id = r.realm_id
-                WHERE 
-                        br.brigade_id = :'brigade_id'
-                        AND br.draft = false
-                        AND br.featured = true
-                        AND (
-                                SELECT 
-                                        COUNT(*)
-                                FROM 
-                                        :"schema_name".brigadier_realms
-                                WHERE 
-                                        brigade_id = :'brigade_id'
-                                        AND draft = false
-                                        AND featured = false
-                        ) = 0;
+        SELECT
+                COUNT(*) AS total_count,
+	        COUNT(CASE WHEN br.draft = TRUE THEN 1 END) AS draft_count,
+                COUNT(CASE WHEN br.featured = TRUE THEN 1 END) AS featured_count,
+                MAX(CASE WHEN br.featured = TRUE THEN br.realm_id::text ELSE NULL END)::uuid AS realm_id,
+                MAX(CASE WHEN br.featured = TRUE THEN r.control_ip::text ELSE NULL END)::inet AS control_ip,
+                (
+                        SELECT 
+                                bra.realm_id
+                        FROM 
+                                :"schema_name".brigadier_realms_actions bra
+                        WHERE 
+                                bra.brigade_id = :'brigade_id'
+                        AND 
+                                bra.event_name = 'remove'
+                        ORDER BY bra.event_time DESC
+                        LIMIT 1
+                ) AS last_realm_id
+        FROM
+                :"schema_name".brigadier_realms br
+        JOIN 	:"schema_name".realms r ON br.realm_id = r.realm_id
+        WHERE
+                br.brigade_id = :'brigade_id'
+        ;
 COMMIT;
 EOF
-        )
+)
         rc=$?
         if [ $rc -ne 0 ]; then
-                echo "[-]         Something wrong with db: $rc"
+                echo "[-][get realm] Something wrong with db: $rc"
+                exit 1
+        fi 
+
+        total_count=$(echo "${result}" | cut -d '|' -f 1)
+        draft_count=$(echo "${result}" | cut -d '|' -f 2)
+        featured_count=$(echo "${result}" | cut -d '|' -f 3)
+        realm_id=$(echo "${result}" | cut -d '|' -f 4)
+        control_ip=$(echo "${result}" | cut -d '|' -f 5)
+        last_realm_id=$(echo "${result}" | cut -d '|' -f 6)
+}
+
+if [ -z "${ACTION}" ]; then
+        
+        getrealm "${bid}"
+
+        if [ "${total_count}" -gt 1 ]; then
+                echo "[-] Brigade is not ready for deletion. Realms total=${total_count}, draft=${draft_count}, featured=${featured_count}"
+                exit 1
+        fi
+
+        if [ "${total_count}" -gt 0 ] && [ "${featured_count}" -eq 0 ]; then
+                echo "[-] Brigade is not ready for deletion. No featured realms. Realms total=${total_count}, draft=${draft_count}"
                 exit 1
         fi
 
         if [ -z "${realm_id}" ]; then
-                echo "[-]         Brigade is not ready for deletion"
-                exit 1
+                realm_id="00000000-0000-0000-0000-000000000000"
         fi
 
         spinlock_filename="${realm_id}.lock"
@@ -107,14 +136,14 @@ EOF
         elif [ -d "/tmp" ] && [ -w "/tmp" ]; then
                 spinlock="/tmp/${spinlock_filename}"
         else
-                echo "[-]         Can't create spinlock file"
+                echo "[-] Can't create spinlock file"
                 exit 1
         fi
 
         flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${bid}" "${REASON}" "go"
         rc=$?
         if [ $rc -ne 0 ]; then
-                echo "[-]         Something wrong with deletion: $rc"
+                echo "[-] Something wrong with deletion: $rc"
                 exit 1
         fi
 
@@ -122,60 +151,50 @@ EOF
 fi
 
 if [ -n "${ACTION}" ] && [ "${ACTION}" != "go" ]; then
-        echo "[-]         Action is invalid"
+        echo "[-] Action is invalid"
         exit 1
 fi
 
-control_ip=$(psql -d "${DBNAME}" -q -t -A \
-        --set ON_ERROR_STOP=yes \
-        --set brigade_id="${bid}" \
-        --set schema_name="${SCHEMA}" <<EOF
-BEGIN;
-        SELECT 
-                r.control_ip 
-        FROM
-                :"schema_name".brigadier_realms br
-                JOIN :"schema_name".realms r ON br.realm_id = r.realm_id
-        WHERE 
-                br.brigade_id = :'brigade_id'
-                AND br.draft = false
-                AND br.featured = true
-                AND (
-                        SELECT 
-                                COUNT(*)
-                        FROM 
-                                :"schema_name".brigadier_realms
-                        WHERE 
-                                brigade_id = :'brigade_id'
-                                AND draft = false
-                                AND featured = false
-                ) = 0;
-COMMIT;
-EOF
-        )
-rc=$?
-if [ $rc -ne 0 ]; then
-        echo "[-]         Something wrong with db: $rc"
-        exit 1
-fi
-if [ -z "${control_ip}" ]; then
-        echo "[-]         Brigade is not ready for deletion"
-        exit 1
+getrealm "${bid}"
+
+if [ -n "${realm_id}" ]; then
+        if [ -z "${control_ip}" ]; then
+                echo "[-] Brigade is not ready for deletion. No control_ip. Realm: ${realm_id}"
+                exit 1
+        fi
+
+        del="delbrigade -uuid ${bid}"
+        echo "${del}"
+
+        num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}" 2>&1)
+        rc=$?
+        if [ $rc -ne 0 ]; then
+                # shellcheck disable=SC2143
+                if [ -z "$(echo "${num}" | grep "Can't get control ip" | grep "no rows in result set")" ]; then
+                        echo "[-] Something wrong with realm [ssh]: $rc"
+                        if [ -n "${num}" ]; then
+                                echo "[D] SSH DEBUG: ${num}"
+                        fi
+
+                        exit 1
+                fi
+
+                echo "[+] Brigade not found. Don't worry."
+        fi
 fi
 
-del="delbrigade -uuid ${bid}"
-echo "${del}"
-
-num=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}")
-rc=$?
-if [ $rc -ne 0 ]; then
-        echo "[-]         Something wrong with realm: $rc"
-        exit 1
+if [ -z "${realm_id}" ]; then
+        if [ -z "${last_realm_id}" ]; then
+                echo "[-] Brigade is not ready for deletion. No realm_id nor last_realm_id"
+                exit 1
+        fi
 fi
 
 result="$(psql -d "${DBNAME}" -q -t -A \
         --set ON_ERROR_STOP=yes \
         --set brigade_id="${bid}" \
+        --set realm_id="${realm_id}" \
+        --set last_realm_id="${last_realm_id}" \
         --set reason="${REASON}" \
         --set schema_name="${SCHEMA}" <<EOF
 BEGIN;
@@ -183,21 +202,24 @@ BEGIN;
                 :"schema_name".deleted_brigadiers 
                 (brigade_id, reason, realm_id) 
         SELECT
-                :'brigade_id',:'reason', br.realm_id
+                :'brigade_id',
+                :'reason', 
+                CASE WHEN br.realm_id IS NULL THEN :'last_realm_id' ELSE br.realm_id END AS realm_id
         FROM
-                :"schema_name".brigadier_realms br
+                :"schema_name".brigadiers b
+                LEFT JOIN :"schema_name".brigadier_realms br ON b.brigade_id = br.brigade_id
         WHERE 
-                br.brigade_id = :'brigade_id'
+                b.brigade_id = :'brigade_id'
                 AND (
                         SELECT 
-                                COUNT(*)
+                                be.event_name
                         FROM 
-                                :"schema_name".brigadier_realms
+                                :"schema_name".brigades_actions be
                         WHERE 
-                                brigade_id = :'brigade_id'
-                                AND draft = false
-                                AND featured = false
-                ) = 0;
+                                be.brigade_id = :'brigade_id'
+                        ORDER BY be.event_time DESC
+                        LIMIT 1
+                ) IN ('create_brigade', 'restore_brigade');
 
         INSERT INTO 
                 :"schema_name".brigadier_realms_actions
@@ -208,62 +230,51 @@ BEGIN;
                 :"schema_name".brigadier_realms br
         WHERE 
                 br.brigade_id = :'brigade_id'
-        AND (
-                SELECT 
-                        COUNT(*)
-                FROM 
-                        :"schema_name".brigadier_realms
-                WHERE 
-                        brigade_id = :'brigade_id'
-                        AND draft = false
-                        AND featured = false
-        ) = 0;
+                AND br.realm_id = NULLIF(:'realm_id', '')::uuid;
         
         DELETE FROM 
                 :"schema_name".brigadier_realms
         WHERE 
                 brigade_id = :'brigade_id'
-                AND draft = false
-                AND featured = true
-                AND (
-                        SELECT 
-                                COUNT(*)
-                        FROM 
-                                :"schema_name".brigadier_realms
-                        WHERE 
-                                brigade_id = :'brigade_id'
-                                AND draft = false
-                                AND featured = false
-                ) = 0;
+                AND realm_id = NULLIF(:'realm_id', '')::uuid;
 
         INSERT INTO 
                 :"schema_name".brigades_actions 
                 (brigade_id, event_name, event_info, event_time) 
         SELECT
                 :'brigade_id', 'delete_brigade', :'reason', now() AT TIME ZONE 'UTC'
-        WHERE (
-                SELECT 
-                        COUNT(*)
-                FROM 
-                        :"schema_name".brigadier_realms
-                WHERE 
-                        brigade_id = :'brigade_id'
-                        AND draft = false
-                        AND featured = false
-        ) = 0
-        RETURNING :'brigade_id';
+        FROM
+                :"schema_name".brigadiers
+        WHERE   
+                brigade_id = :'brigade_id'              
+                AND (
+                        SELECT 
+                                be.event_name
+                        FROM 
+                                :"schema_name".brigades_actions be
+                        WHERE 
+                                be.brigade_id = :'brigade_id'
+                        ORDER BY be.event_time DESC
+                        LIMIT 1
+                ) IN ('create_brigade', 'restore_brigade')
+        RETURNING brigade_id;
 COMMIT;
 EOF
 )"
 rc=$?
 if [ $rc -ne 0 ]; then
-        echo "[-]         Something wrong with db: $rc"
+        echo "[-] Something wrong with db while deleting brigade: $rc."
         exit 1
 fi
 
 if [ -z "${result}" ]; then
-        echo "[-]         Brigade is not ready for deletion"
+        echo "[-] Brigade is not ready for deletion"
         exit 1
 fi
 
-echo "[+]         ${num} slots rest"
+if [ -n "${num}" ]; then
+        case $num in
+                ''|*[!0-9]*) ;;
+                *) echo "[+]         ${num} slots rest" ;;
+        esac
+fi

@@ -8,6 +8,8 @@ USERNAME="_valera_"
 LOCK_TIMEOUT=${LOCK_TIMEOUT:-"120"} # seconds
 
 if [ $# -eq 1 ]; then
+        bid="${1}"
+
         info=$(psql -d "${DBNAME}" -v ON_ERROR_STOP=yes -t --set schema_name="${SCHEMA}" --set bid="${bid}" <<EOF
 SELECT
         r.control_ip,
@@ -37,7 +39,7 @@ EOF
         del="delbrigade -uuid ${bid}"
         echo "${del}"
 
-        ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}"
+        ssh -o IdentitiesOnly=yes -o IdentityFile="${ETCDIR}"/id_ed25519 -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}"
         rc=$?
         if [ $rc -ne 0 ]; then
                 echo "[-]         Something wrong with realm: $rc"

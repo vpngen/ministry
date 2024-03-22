@@ -84,8 +84,6 @@ BEGIN;
                                 :"schema_name".brigadier_realms_actions bra
                         WHERE 
                                 bra.brigade_id = :'brigade_id'
-                        AND 
-                                bra.event_name = 'remove'
                         ORDER BY bra.event_time DESC
                         LIMIT 1
                 ) AS last_realm_id
@@ -204,7 +202,7 @@ BEGIN;
         SELECT
                 :'brigade_id',
                 :'reason', 
-                CASE WHEN br.realm_id IS NULL THEN :'last_realm_id' ELSE br.realm_id END AS realm_id
+                CASE WHEN br.realm_id IS NULL THEN :'last_realm_id'::uuid ELSE br.realm_id END AS realm_id
         FROM
                 :"schema_name".brigadiers b
                 LEFT JOIN :"schema_name".brigadier_realms br ON b.brigade_id = br.brigade_id

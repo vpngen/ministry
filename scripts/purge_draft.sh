@@ -38,6 +38,9 @@ if [ "$#" -eq 3 ]; then
                 # shellcheck disable=SC2143
                 if [ -z "$(echo "${out}" | grep "Can't get control ip" | grep "no rows in result set")" ]; then
                         echo "[-]         Something wrong with deletion: $rc"
+                        if [ -n "${out}" ]; then
+                                echo "[D] SSH DEBUG: ${out}"
+                        fi
 
                         exit 1
                 fi

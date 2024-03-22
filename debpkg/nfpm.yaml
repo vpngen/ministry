@@ -92,6 +92,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: ministry/scripts/purge_empty.sh
+  dst: /opt/vg-head-vpnapi/purge_empty.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: ministry/scripts/sync_abandoned.sh
   dst: /opt/vg-head-vpnapi/sync_abandoned.sh
   file_info:

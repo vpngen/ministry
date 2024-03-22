@@ -44,7 +44,17 @@ BEGIN;
                 LEFT JOIN  :"schema_name".deleted_brigadiers AS d ON b.brigade_id = d.brigade_id 
         WHERE 
                 d.brigade_id IS NULL 
-                AND r.brigade_id IS NULL;
+                AND r.brigade_id IS NULL
+                AND (
+                        SELECT 
+                                be.event_name
+                        FROM 
+                                "head".brigades_actions be
+                        WHERE 
+                                be.brigade_id = b.brigade_id
+                        ORDER BY be.event_time DESC
+                        LIMIT 1
+                ) IN ('create_brigade', 'restore_brigade');
 COMMIT;
 EOF
 )

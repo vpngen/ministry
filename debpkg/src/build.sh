@@ -8,6 +8,7 @@ go build -C ministry/cmd/checkbrigadier -o ../../../bin/checkbrigadier
 go build -C ministry/cmd/createbrigade -o ../../../bin/createbrigade
 go build -C ministry/cmd/restorebrigadier -o ../../../bin/restorebrigadier
 go build -C ministry/cmd/syncstats -o ../../../bin/syncstats
+go build -C ministry/cmd/recodesnaps -o ../../../bin/recodesnaps
 
 go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 

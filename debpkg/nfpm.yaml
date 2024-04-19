@@ -148,6 +148,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/recodesnaps
+  dst: /opt/vg-head-vpnapi/recodesnaps
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 
 - dst: /opt/vg-partners-admin
   type: dir

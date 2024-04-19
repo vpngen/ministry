@@ -4,6 +4,7 @@ HEAD_ADMIN_USER="vg_head_admin"
 PARTNERS_ADMIN_USER="vg_partners_admin"
 HEAD_VPNAPI_USER="vg_head_vpnapi"
 HEAD_STATS_USER="vg_head_stats"
+HEAD_MIGRATION_USER="vg_head_migr"
 
 remove_users () {
         if id "${HEAD_ADMIN_USER}" >/dev/null 2>&1; then
@@ -28,6 +29,12 @@ remove_users () {
                 userdel -r "${HEAD_STATS_USER}"
         else
                 echo "user ${HEAD_STATS_USER} does not exists"
+        fi
+
+        if id "${HEAD_MIGRATION_USER}" >/dev/null 2>&1; then
+                userdel -r "${HEAD_MIGRATION_USER}"
+        else
+                echo "user ${HEAD_MIGRATION_USER} does not exists"
         fi
 }
 

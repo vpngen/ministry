@@ -310,10 +310,11 @@ func undeleteBrigadier(ctx context.Context, tx pgx.Tx, schema string, brigadeID 
 		return fmt.Errorf("delete: %w", err)
 	}
 
-	event := "create_brigade"
-	if comm.RowsAffected() > 0 {
-		event = "restore_brigade"
+	if comm.RowsAffected() == 0 {
+		return nil
 	}
+
+	event := "restore_brigade"
 
 	sqlCreateRealmAction := `
 	INSERT INTO

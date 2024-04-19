@@ -4,6 +4,7 @@ HEAD_ADMIN_USER="vg_head_admin"
 PARTNERS_ADMIN_USER="vg_partners_admin"
 HEAD_VPNAPI_USER="vg_head_vpnapi"
 HEAD_STATS_USER="vg_head_stats"
+HEAD_MIGRATION_USER="vg_head_migr"
 
 create_users () {
         if id "${HEAD_ADMIN_USER}" >/dev/null 2>&1; then
@@ -28,6 +29,12 @@ create_users () {
                 echo "user ${HEAD_STATS_USER} already exists"
         else
                 useradd -p "*" -m "${HEAD_STATS_USER}" -s /bin/bash
+        fi
+
+        if id "${HEAD_MIGRATION_USER}" >/dev/null 2>&1; then
+                echo "user ${HEAD_MIGRATION_USER} already exists"
+        else
+                useradd -p "*" -m "${HEAD_MIGRATION_USER}" -s /bin/bash
         fi
 }
 

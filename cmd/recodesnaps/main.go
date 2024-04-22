@@ -13,7 +13,7 @@ import (
 
 var LogTag = setLogTag()
 
-const defaultLogTag = "snap_prepare"
+const defaultLogTag = "recodesnaps"
 
 func setLogTag() string {
 	executable, err := os.Executable()

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
+	"os"
 	"strings"
 
 	dcmgmt "github.com/vpngen/dc-mgmt"
@@ -30,16 +31,122 @@ func createRestorePlan(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationC
 		return nil, fmt.Errorf("decrypt psk: %w", err)
 	}
 
+	switch opts.mirror {
+	case true:
+		plan, err := createRestorePlanMirrored(data, reservConfig, opts, psk)
+		if err != nil {
+			return nil, fmt.Errorf("create mirrored plan: %w", err)
+		}
+
+		return plan, nil
+	default:
+		plan, err := createRestorePlanNotMirrored(data, reservConfig, opts, psk)
+		if err != nil {
+			return nil, fmt.Errorf("create non-mirrored plan: %w", err)
+		}
+
+		return plan, nil
+	}
+}
+
+type prepNode struct {
+	config *dcmgmt.RestoreNodeConfig
+	pubkey [naclkey.NaclBoxKeyLength]byte
+	used   map[string]struct{}
+}
+
+var (
+	ErrMirroredIPNotFound   = fmt.Errorf("mirrored ip not found")
+	ErrMirroredIPDuplicated = fmt.Errorf("mirrored ip duplicated")
+)
+
+func createRestorePlanMirrored(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationConfig,
+	opts *opts, psk []byte,
+) (*dcmgmt.RestorePlan, error) {
+	nodes := make(map[string]*prepNode)
+
+	for _, snap := range data.Snaps {
+		brigade, err := decodeEncryptedBrigade(snap, psk, opts)
+		if err != nil {
+			return nil, fmt.Errorf("decode brigade: %w", err)
+		}
+
+		addr := brigade.EndpointIPv4.String()
+
+		var (
+			node *prepNode
+			ok   bool
+		)
+
+		for _, ctrl := range reservConfig.Plan {
+			for _, slot := range ctrl.Slots {
+				if slot == addr {
+					node, ok = nodes[ctrl.ControlIP]
+					if !ok {
+						routerPub, err := naclkey.UnmarshalPublicKey([]byte(ctrl.RouterNACLPubKey))
+						if err != nil {
+							return nil, fmt.Errorf("unmarshal router public key: %w", err)
+						}
+
+						nodeConfig := &dcmgmt.RestoreNodeConfig{
+							ControlIP: ctrl.ControlIP,
+							Snaps:     make([]dcmgmt.PreparedSnap, 0, len(ctrl.Slots)),
+						}
+
+						node = &prepNode{
+							config: nodeConfig,
+							pubkey: routerPub,
+							used:   make(map[string]struct{}),
+						}
+
+						nodes[ctrl.ControlIP] = node
+					}
+				}
+			}
+		}
+
+		if node == nil {
+			return nil, fmt.Errorf("%w: %s", ErrMirroredIPNotFound, addr)
+		}
+
+		if _, ok := node.used[addr]; ok {
+			return nil, fmt.Errorf("%w: %s: %s", ErrMirroredIPDuplicated, addr, brigade.BrigadeID)
+		}
+
+		snap, err := encodeEncryptedBrigade(brigade, addr, reservConfig.ReservationID, &node.pubkey, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "encode brigade: %s\n", err)
+
+			continue
+			// return nil, fmt.Errorf("encode brigade: %w", err)
+		}
+
+		node.config.Snaps = append(node.config.Snaps, *snap)
+
+		node.used[addr] = struct{}{}
+	}
+
+	plan := &dcmgmt.RestorePlan{
+		ReservationID: reservConfig.ReservationID,
+		RealmFP:       opts.targetRealmFP,
+	}
+
+	for _, node := range nodes {
+		plan.Plan = append(plan.Plan, *node.config)
+	}
+
+	return plan, nil
+}
+
+func createRestorePlanNotMirrored(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationConfig,
+	opts *opts, psk []byte,
+) (*dcmgmt.RestorePlan, error) {
 	plan := &dcmgmt.RestorePlan{
 		ReservationID: reservConfig.ReservationID,
 		RealmFP:       opts.targetRealmFP,
 	}
 
 	for _, ctrl := range reservConfig.Plan {
-		if len(data.Snaps) == 0 {
-			break
-		}
-
 		routerPub, err := naclkey.UnmarshalPublicKey([]byte(ctrl.RouterNACLPubKey))
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal router public key: %w", err)
@@ -51,13 +158,17 @@ func createRestorePlan(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationC
 		}
 
 		for _, slot := range ctrl.Slots {
-			if len(data.Snaps) == 0 {
-				break
+			brigade, err := decodeEncryptedBrigade(data.Snaps[0], psk, opts)
+			if err != nil {
+				return nil, fmt.Errorf("decode brigade: %w", err)
 			}
 
-			snap, err := recodeEncryptedBrigade(data.Snaps[0], slot, reservConfig.ReservationID, &routerPub, psk, opts)
+			snap, err := encodeEncryptedBrigade(brigade, slot, reservConfig.ReservationID, &routerPub, opts)
 			if err != nil {
-				return nil, fmt.Errorf("recode snap: %w", err)
+				fmt.Fprintf(os.Stderr, "encode brigade: %s\n", err)
+
+				continue
+				// return nil, fmt.Errorf("encode brigade: %w", err)
 			}
 
 			data.Snaps = data.Snaps[1:]
@@ -71,10 +182,9 @@ func createRestorePlan(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationC
 	return plan, nil
 }
 
-func recodeEncryptedBrigade(snap *dcmgmt.EncryptedBrigade,
-	slot string, reservationID string, routerPub *[naclkey.NaclBoxKeyLength]byte,
+func decodeEncryptedBrigade(snap *dcmgmt.EncryptedBrigade,
 	psk []byte, opts *opts,
-) (*dcmgmt.PreparedSnap, error) {
+) (*storage.Brigade, error) {
 	if snap.RealmKeyFP != "" {
 		return nil, fmt.Errorf("%w: non-empty realm key fingerprint", ErrInvalidSnapshotData)
 	}
@@ -121,6 +231,13 @@ func recodeEncryptedBrigade(snap *dcmgmt.EncryptedBrigade,
 		return nil, fmt.Errorf("prepare snap: %w", err)
 	}
 
+	return brigade, nil
+}
+
+func encodeEncryptedBrigade(brigade *storage.Brigade,
+	slot string, reservationID string, routerPub *[naclkey.NaclBoxKeyLength]byte,
+	opts *opts,
+) (*dcmgmt.PreparedSnap, error) {
 	if err := cleanBrigade(brigade); err != nil {
 		return nil, fmt.Errorf("clear snap: %w", err)
 	}
@@ -192,7 +309,7 @@ func recodeBrigade(brigade *storage.Brigade, slot string, routerPub *[naclkey.Na
 
 	wgPrivateRouterEnc, err := reEncodeNACL(brigade.WgPrivateShufflerEnc, routerPub, opts.masterPrivKey)
 	if err != nil {
-		return fmt.Errorf("re-encode wg private: %w", err)
+		return fmt.Errorf("re-encode wg private: %w: %s", err, brigade.BrigadeID)
 	}
 
 	brigade.WgPrivateRouterEnc = wgPrivateRouterEnc

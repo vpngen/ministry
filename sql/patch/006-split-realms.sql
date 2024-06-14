@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS :"schema_name".brigadier_realms_actions (
         brigade_id          uuid NOT NULL,
         realm_id            uuid NOT NULL,
         event_time          timestamp without time zone NOT NULL,
-        event_name          text NOT NULL, -- 'order', 'modify', 'remove'
-        event_info          text NOT NULL, --  modify: 'compose', 'promote', 'retire'
+        event_name          text NOT NULL, -- 'order', 'modify', 'remove', 'compose'
+        event_info          text NOT NULL, --  modify: 'promote', 'retire'; order: 'draft'; compose: 'spare'
         update_time         timestamp without time zone NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
         FOREIGN KEY (brigade_id) REFERENCES :"schema_name".brigadiers_ids (brigade_id),
         FOREIGN KEY (realm_id) REFERENCES :"schema_name".realms (realm_id),

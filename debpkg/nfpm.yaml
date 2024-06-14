@@ -154,6 +154,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: ministry/scripts/switch_remote_migr.sh
+  dst: /opt/vg-head-vpnapi/switch_remote_migr.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 
 - dst: /opt/vg-partners-admin
   type: dir

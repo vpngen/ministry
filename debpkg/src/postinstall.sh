@@ -12,6 +12,8 @@ PARTNERS_ADMIN_DBUSER=${PARTNERS_ADMIN_DBUSER:-"vg_partners_admin"}
 echo "partners admin user: $PARTNERS_ADMIN_DBUSER"
 HEAD_STATS_DBUSER=${HEAD_STATS_DBUSER:-"vg_head_stats"}
 echo "head stats user: $HEAD_STATS_DBUSER"
+HEAD_MIGRATION_DBUSER=${HEAD_MIGRATION_DBUSER:-"vg_head_migr"}
+echo "head migration user: $HEAD_MIGRATION_DBUSER"
 
 SQL_DIR="/usr/share/vg-head/sql"
 
@@ -21,7 +23,8 @@ load_sql_file () {
                 --set head_stats_dbuser="${HEAD_STATS_DBUSER}" \
                 --set head_admin_dbuser="${HEAD_ADMIN_DBUSER}" \
                 --set head_vpnapi_dbuser="${HEAD_VPNAPI_DBUSER}" \
-                --set partners_admin_dbuser="${PARTNERS_ADMIN_DBUSER}"
+                --set partners_admin_dbuser="${PARTNERS_ADMIN_DBUSER}" \
+                --set head_migration_dbuser="${HEAD_MIGRATION_DBUSER}"
         rc=$?
         if [ ${rc} -ne 0 ] && [ ${rc} -ne 3 ]; then
                 exit 1

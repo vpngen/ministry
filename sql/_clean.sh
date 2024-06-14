@@ -14,13 +14,16 @@ PARTNERS_ADMIN_DBUSER=${PARTNERS_ADMIN_DBUSER:-"vg_partners_admin"}
 echo "partners admin user: $PARTNERS_ADMIN_DBUSER"
 HEAD_STATS_DBUSER=${HEAD_STATS_DBUSER:-"vg_head_stats"}
 echo "head stats user: $HEAD_STATS_DBUSER"
+HEAD_MIGRATION_DBUSER=${HEAD_MIGRATION_DBUSER:-"vg_head_migr"}
+echo "head migration user: $HEAD_MIGRATION_DBUSER"
 
 cat <<EOF | sudo -i -u postgres psql  \
     --set schema_name="${SCHEMA}" \
     --set head_stats_dbuser="${HEAD_STATS_DBUSER}" \
     --set head_admin_dbuser="${HEAD_ADMIN_DBUSER}" \
     --set head_vpnapi_dbuser="${HEAD_VPNAPI_DBUSER}" \
-    --set partners_admin_dbuser="${PARTNERS_ADMIN_DBUSER}"
+    --set partners_admin_dbuser="${PARTNERS_ADMIN_DBUSER}" \
+    --set head_migration_dbuser="${HEAD_MIGRATION_DBUSER}"
 DROP DATABASE ${DBNAME};
 DROP ROLE ${HEAD_STATS_DBUSER};
 DROP ROLE ${HEAD_ADMIN_DBUSER};

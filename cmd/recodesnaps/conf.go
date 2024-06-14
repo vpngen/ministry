@@ -31,7 +31,8 @@ type cfg struct {
 
 	home string
 
-	force bool
+	force  bool
+	mirror bool
 }
 
 type opts struct {
@@ -46,7 +47,8 @@ type opts struct {
 	reservfile string
 	planfile   string
 
-	force bool
+	force  bool
+	mirror bool
 }
 
 var (
@@ -109,7 +111,8 @@ func conf() (*opts, error) {
 		reservfile: c.reservConfig,
 		planfile:   c.planfile,
 
-		force: c.force,
+		force:  c.force,
+		mirror: c.mirror,
 	}, nil
 }
 
@@ -154,6 +157,7 @@ func parseArgs(c *cfg) error {
 	outplan := flag.String("out", "", "output plan file. Default: none")
 	fp := flag.String("tfp", "", "target realm key fingerprint")
 	force := flag.Bool("force", false, "force ignore snapshot errors")
+	mirror := flag.Bool("mirror", false, "mirror mode. Only same IP addresses on both sides are allowed")
 
 	flag.Parse()
 
@@ -169,6 +173,7 @@ func parseArgs(c *cfg) error {
 	c.planfile = *outplan
 	c.targetRealmFP = *fp
 	c.force = *force
+	c.mirror = *mirror
 
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -243,6 +244,8 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
 	id uuid.UUID, label string, labelID string, firstVisit int64,
 ) error {
+	fv := time.Unix(firstVisit, 0)
+
 	sql := `
 	INSERT INTO
 		%s (brigade_id,	label, label_id, first_visit, update_time)
@@ -253,7 +256,7 @@ func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
 	`
 	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),
-		id, label, labelID, firstVisit,
+		id, label, labelID, fv,
 	); err != nil {
 		return fmt.Errorf("store label: %w", err)
 	}

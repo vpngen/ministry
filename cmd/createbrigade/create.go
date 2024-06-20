@@ -193,7 +193,7 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 }
 
 func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, time.Time, error) {
-	sqlInsertID := `INSERT INTO %s (brigade_id, created_at) VALUES ($1, $2::TIMESTAMP AT TIME ZONE 'UTC')`
+	sqlInsertID := `INSERT INTO %s (brigade_id, created_at) VALUES ($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC')`
 	sql := fmt.Sprintf(sqlInsertID, pgx.Identifier{schema, "brigadiers_ids"}.Sanitize())
 
 	now := time.Now().UTC()

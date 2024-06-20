@@ -8,7 +8,7 @@ ALTER TABLE :"schema_name".start_labels ADD COLUMN label_id UUID NOT NULL DEFAUL
 ALTER TABLE :"schema_name".start_labels ADD CONSTRAINT start_labels_pkey PRIMARY KEY (label_id);
 ALTER TABLE :"schema_name".start_labels ADD COLUMN first_visit TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL;
 
-UPDATE :"schema_name".start_labels SET first_visit = created_at FROM :"schema_name".brigadiers WHERE start_labels.brigade_id = brigadiers.brigade_id;
+UPDATE :"schema_name".start_labels SET first_visit = created_at FROM :"schema_name".brigadiers_ids WHERE start_labels.brigade_id = brigadiers_ids.brigade_id;
 
 ALTER TABLE :"schema_name".start_labels ALTER COLUMN first_visit SET NOT NULL;
 

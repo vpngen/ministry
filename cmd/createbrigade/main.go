@@ -41,7 +41,7 @@ const (
 func main() {
 	var w io.WriteCloser
 
-	chunked, jout, token, label, id, fv, err := parseArgs()
+	chunked, jout, token, label, labelID, fv, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -80,7 +80,7 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, label, id, fv)
+	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, label, labelID, fv)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
@@ -198,7 +198,7 @@ func parseArgs() (bool, bool, []byte, string, string, int64, error) {
 	}
 
 	id := *labelID
-	if id != "" {
+	if id == "" {
 		id = uuid.New().String()
 	}
 

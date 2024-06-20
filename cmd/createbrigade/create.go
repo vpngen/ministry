@@ -241,17 +241,19 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 }
 
 func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
-	id uuid.UUID, label string,
+	id uuid.UUID, label string, labelID string, firstVisit int64,
 ) error {
 	sql := `
 	INSERT INTO
-		%s (brigade_id,	label)
+		%s (brigade_id,	label, label_id, first_visit, update_time)
 	VALUES
-		($1, $2)
+		($1, $2, $3, $4::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
+	ON CONFLICT (label_id) DO UPDATE
+		SET brigade_id=$1, label=$2, first_visit=$4::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', updated_at=NOW() AT TIME ZONE 'UTC'
 	`
 	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),
-		id, label,
+		id, label, labelID, firstVisit,
 	); err != nil {
 		return fmt.Errorf("store label: %w", err)
 	}
@@ -260,7 +262,8 @@ func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
 }
 
 func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
-	partnerID uuid.UUID, creationInfo string, label string,
+	partnerID uuid.UUID, creationInfo string,
+	label string, labelID string, firstVisit int64,
 ) (uuid.UUID, string, string, *namesgenerator.Person, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -292,10 +295,8 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier partner: %w", err)
 	}
 
-	if label != "" {
-		if err := storeBrigadierLabel(ctx, tx, schema, id, label); err != nil {
-			return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
-		}
+	if err := storeBrigadierLabel(ctx, tx, schema, id, label, labelID, firstVisit); err != nil {
+		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 
 	err = tx.Commit(ctx)

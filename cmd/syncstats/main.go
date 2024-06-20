@@ -14,7 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	sshVng "github.com/vpngen/ministry/internal/ssh"
 	"golang.org/x/crypto/ssh"
@@ -98,8 +100,10 @@ type ActionsUpdate struct {
 
 // StartLabelsUpdate - is a struct of a table start_labels.
 type StartLabelsUpdate struct {
-	BrigadeID  string    `json:"brigade_id"`
+	BrigadeID  string    `json:"brigade_id,omitempty"`
+	LabelID    string    `json:"label_id"`
 	Label      string    `json:"label"`
+	FirstVisit time.Time `json:"first_visit"`
 	UpdateTime time.Time `json:"update_time"`
 }
 
@@ -172,49 +176,49 @@ func main() {
 		log.Fatalf("Can't fetch last updates: %s", err)
 	}
 
-	realms, err := syncRealms(sshconf, addr, db, schema, lastUpdates.UpdateTimeRealms)
+	realms, err := syncRealms(db, schema, lastUpdates.UpdateTimeRealms)
 	if err != nil {
 		log.Fatalf("Sync realms: %s", err)
 	}
 
 	log.Println(realms)
 
-	partners, err := syncPartners(sshconf, addr, db, schema, lastUpdates.UpdateTimePartners)
+	partners, err := syncPartners(db, schema, lastUpdates.UpdateTimePartners)
 	if err != nil {
 		log.Fatalf("Sync partners: %s", err)
 	}
 
 	log.Println(partners)
 
-	ids, err := syncIDs(sshconf, addr, db, schema, lastUpdates.UpdateTimeIDs)
+	ids, err := syncIDs(db, schema, lastUpdates.UpdateTimeIDs)
 	if err != nil {
 		log.Fatalf("Sync IDs: %s", err)
 	}
 
 	log.Println(ids)
 
-	actions, err := syncActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeActions)
+	actions, err := syncActions(db, schema, lastUpdates.UpdateTimeActions)
 	if err != nil {
 		log.Fatalf("Sync actions: %s", err)
 	}
 
 	log.Println(actions)
 
-	realmsActions, err := syncRealmsActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeActionsRealms)
+	realmsActions, err := syncRealmsActions(db, schema, lastUpdates.UpdateTimeActionsRealms)
 	if err != nil {
 		log.Fatalf("Sync realms actions: %s", err)
 	}
 
 	log.Println(realmsActions)
 
-	partnersActions, err := syncPartnersActions(sshconf, addr, db, schema, lastUpdates.UpdateTimeActionsPartners)
+	partnersActions, err := syncPartnersActions(db, schema, lastUpdates.UpdateTimeActionsPartners)
 	if err != nil {
 		log.Fatalf("Sync partners actions: %s", err)
 	}
 
 	log.Println(partnersActions)
 
-	startLabels, err := syncStartLabels(sshconf, addr, db, schema, lastUpdates.UpdateTimeStartLabels)
+	startLabels, err := syncStartLabels(db, schema, lastUpdates.UpdateTimeStartLabels)
 	if err != nil {
 		log.Fatalf("Sync start labels: %s", err)
 	}
@@ -300,7 +304,7 @@ func applyUpdates(sshConfig *ssh.ClientConfig, addr string, updates *UpdatesPack
 	return nil
 }
 
-func syncPartnersActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsPartnersUpdate, error) {
+func syncPartnersActions(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsPartnersUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst partners actions updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryPartnersActionsUpdates(dbPool, schema, lastUpdate)
@@ -388,7 +392,7 @@ func queryPartnersActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate tim
 	return updates, nil
 }
 
-func syncRealmsActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsRealmsUpdate, error) {
+func syncRealmsActions(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsRealmsUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst realms actions updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryRealmsActionsUpdates(dbPool, schema, lastUpdate)
@@ -476,7 +480,7 @@ func queryRealmsActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.
 	return updates, nil
 }
 
-func syncActions(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsUpdate, error) {
+func syncActions(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]ActionsUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst actions updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryActionsUpdates(dbPool, schema, lastUpdate)
@@ -561,7 +565,7 @@ func queryActionsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) 
 	return updates, nil
 }
 
-func syncPartners(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
+func syncPartners(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]PartnersUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst partners updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryPartnersUpdates(dbPool, schema, lastUpdate)
@@ -640,7 +644,7 @@ func queryPartnersUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time)
 	return updates, nil
 }
 
-func syncRealms(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]RealmsUpdate, error) {
+func syncRealms(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]RealmsUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst realms updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryRealmsUpdates(dbPool, schema, lastUpdate)
@@ -719,7 +723,7 @@ func queryRealmsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) (
 	return updates, nil
 }
 
-func syncIDs(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]IDsUpdate, error) {
+func syncIDs(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]IDsUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst IDs updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryIDsUpdates(dbPool, schema, lastUpdate)
@@ -795,7 +799,7 @@ func queryIDsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Time) ([]I
 	return updates, nil
 }
 
-func syncStartLabels(sshConfig *ssh.ClientConfig, addr string, dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]StartLabelsUpdate, error) {
+func syncStartLabels(dbPool *pgxpool.Pool, schema string, lastUpdate time.Time) ([]StartLabelsUpdate, error) {
 	fmt.Fprintf(os.Stderr, "Requst start labels updates from: %s\n", lastUpdate.Format(time.RFC3339Nano))
 
 	updates, err := queryStartLabelsUpdates(dbPool, schema, lastUpdate)
@@ -820,7 +824,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 
 	sqlGetStartLabels := `
 	SELECT
-		brigade_id, label, update_time
+		brigade_id, label_id, label, first_visit, update_time
 	FROM 
 		%s 
 	WHERE 
@@ -842,8 +846,10 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 
 	var (
 		updates    = []StartLabelsUpdate{}
-		brigadeID  string
+		brigadeID  pgtype.UUID
+		labelID    uuid.UUID
 		label      string
+		firstVisit time.Time
 		updateTime time.Time
 	)
 
@@ -851,18 +857,24 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 		rows,
 		[]any{
 			&brigadeID,
+			&labelID,
 			&label,
+			&firstVisit,
 			&updateTime,
 		},
 		func() error {
-			updates = append(
-				updates,
-				StartLabelsUpdate{
-					BrigadeID:  brigadeID,
-					Label:      label,
-					UpdateTime: updateTime,
-				},
-			)
+			l := StartLabelsUpdate{
+				LabelID:    labelID.String(),
+				Label:      label,
+				FirstVisit: firstVisit,
+				UpdateTime: updateTime,
+			}
+
+			if brigadeID.Valid {
+				l.BrigadeID = uuid.UUID(brigadeID.Bytes).String()
+			}
+
+			updates = append(updates, l)
 
 			return nil
 		},

@@ -192,16 +192,17 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 	}
 }
 
-func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, error) {
-	sqlInsertID := `INSERT INTO %s (brigade_id, created_at) VALUES ($1, NOW() AT TIME ZONE 'UTC')`
+func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, time.Time, error) {
+	sqlInsertID := `INSERT INTO %s (brigade_id, created_at) VALUES ($1, $2::TIMESTAMP AT TIME ZONE 'UTC')`
 	sql := fmt.Sprintf(sqlInsertID, pgx.Identifier{schema, "brigadiers_ids"}.Sanitize())
 
+	now := time.Now().UTC()
 	id := uuid.New()
 
 	cnt := 0
 	for {
 		if cnt++; cnt > maxCollisionAttemts {
-			return id, fmt.Errorf("create brigadier: %w: %d", ErrMaxCollisions, cnt)
+			return id, now, fmt.Errorf("create brigadier: %w: %d", ErrMaxCollisions, cnt)
 		}
 
 		err := func() error {
@@ -212,7 +213,7 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 
 			defer stx.Rollback(ctx)
 
-			if _, e := tx.Exec(ctx, sql, id); e != nil {
+			if _, e := tx.Exec(ctx, sql, id, now); e != nil {
 				return fmt.Errorf("insert id: %w", e)
 			}
 
@@ -230,7 +231,7 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 					id = uuid.New()
 					continue
 				default:
-					return id, fmt.Errorf("create brigadier: %w", pgErr)
+					return id, now, fmt.Errorf("create brigadier: %w", pgErr)
 				}
 			}
 		}
@@ -238,25 +239,25 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 		break
 	}
 
-	return id, nil
+	return id, now, nil
 }
 
 func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
-	id uuid.UUID, label string, labelID string, firstVisit int64,
+	id uuid.UUID, now time.Time, label string, labelID string, firstVisit int64,
 ) error {
 	fv := time.Unix(firstVisit, 0)
 
 	sql := `
 	INSERT INTO
-		%s (brigade_id,	label, label_id, first_visit, update_time)
+		%s (brigade_id, created_at, label, label_id, first_visit, update_time)
 	VALUES
-		($1, $2, $3, $4::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
+		($1, $2, $3, $4, $5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
 	ON CONFLICT (label_id) DO UPDATE
-		SET brigade_id=$1, label=$2, first_visit=$4::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC'
+		SET brigade_id=$1, created_at=$2, label=$3, first_visit=$5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC'
 	`
 	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),
-		id, label, labelID, fv,
+		id, now, label, labelID, fv,
 	); err != nil {
 		return fmt.Errorf("store label: %w", err)
 	}
@@ -275,7 +276,7 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 
 	defer tx.Rollback(ctx)
 
-	id, err := defineBrigadeID(ctx, tx, schema)
+	id, now, err := defineBrigadeID(ctx, tx, schema)
 	if err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("select brigade id: %w", err)
 	}
@@ -298,7 +299,7 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier partner: %w", err)
 	}
 
-	if err := storeBrigadierLabel(ctx, tx, schema, id, label, labelID, firstVisit); err != nil {
+	if err := storeBrigadierLabel(ctx, tx, schema, id, now, label, labelID, firstVisit); err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 

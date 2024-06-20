@@ -103,6 +103,7 @@ type StartLabelsUpdate struct {
 	BrigadeID  string    `json:"brigade_id,omitempty"`
 	LabelID    string    `json:"label_id"`
 	Label      string    `json:"label"`
+	CreatedAt  time.Time `json:"created_at,omitempty"`
 	FirstVisit time.Time `json:"first_visit"`
 	UpdateTime time.Time `json:"update_time"`
 }
@@ -824,7 +825,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 
 	sqlGetStartLabels := `
 	SELECT
-		brigade_id, label_id, label, first_visit, update_time
+		brigade_id, created_at, label_id, label, first_visit, update_time
 	FROM 
 		%s 
 	WHERE 
@@ -847,6 +848,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 	var (
 		updates    = []StartLabelsUpdate{}
 		brigadeID  pgtype.UUID
+		createdAt  pgtype.Timestamp
 		labelID    uuid.UUID
 		label      string
 		firstVisit time.Time
@@ -857,6 +859,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 		rows,
 		[]any{
 			&brigadeID,
+			&createdAt,
 			&labelID,
 			&label,
 			&firstVisit,
@@ -872,6 +875,10 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 
 			if brigadeID.Valid {
 				l.BrigadeID = uuid.UUID(brigadeID.Bytes).String()
+			}
+
+			if createdAt.Valid {
+				l.CreatedAt = createdAt.Time
 			}
 
 			updates = append(updates, l)

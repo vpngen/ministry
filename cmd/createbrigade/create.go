@@ -251,9 +251,9 @@ func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
 	INSERT INTO
 		%s (brigade_id, created_at, label, label_id, first_visit, update_time)
 	VALUES
-		($1, $2, $3, $4, $5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
+		($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', $3, $4, $5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
 	ON CONFLICT (label_id) DO UPDATE
-		SET brigade_id=$1, created_at=$2, label=$3, first_visit=$5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC'
+		SET brigade_id=$1, created_at=$2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', label=$3, first_visit=$5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC'
 	`
 	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),

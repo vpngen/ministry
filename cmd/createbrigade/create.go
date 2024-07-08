@@ -243,21 +243,21 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 }
 
 func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
-	id uuid.UUID, now time.Time, label string, labelID string, firstVisit int64,
+	id uuid.UUID, pid uuid.UUID, now time.Time, label string, labelID string, firstVisit int64,
 ) error {
 	fv := time.Unix(firstVisit, 0)
 
 	sql := `
 	INSERT INTO
-		%s (brigade_id, created_at, label, label_id, first_visit, update_time)
+		%s (brigade_id, created_at, label, label_id, first_visit, update_time, partner_id)
 	VALUES
-		($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', $3, $4, $5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC')
-	ON CONFLICT (label_id) DO UPDATE
-		SET brigade_id=$1, created_at=$2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', label=$3, first_visit=$5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC'
+		($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', $3, $4, $5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC', $6)
+	ON CONFLICT (label_id, partner_id, first_visit) DO UPDATE
+		SET brigade_id=$1, created_at=$2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', label=$3, first_visit=$5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC', partner_id=$6
 	`
 	if _, err := tx.Exec(ctx,
 		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),
-		id, now, label, labelID, fv,
+		id, now, label, labelID, fv, pid,
 	); err != nil {
 		return fmt.Errorf("store label: %w", err)
 	}
@@ -299,7 +299,7 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier partner: %w", err)
 	}
 
-	if err := storeBrigadierLabel(ctx, tx, schema, id, now, label, labelID, firstVisit); err != nil {
+	if err := storeBrigadierLabel(ctx, tx, schema, id, partnerID, now, label, labelID, firstVisit); err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 

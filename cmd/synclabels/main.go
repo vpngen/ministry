@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ type labelLine struct {
 	firstVisit time.Time
 	label      string
 	labelID    uuid.UUID
+	partnerID  uuid.UUID
 }
 
 func main() {
@@ -56,6 +58,8 @@ func readAndSync(cfg *AppConfig) error {
 			return fmt.Errorf("parse line: %w", err)
 		}
 
+		ll.partnerID = cfg.PartnerID
+
 		if err := syncLabel(ctx, tx, ll); err != nil {
 			return fmt.Errorf("sync label: %w", err)
 		}
@@ -69,20 +73,21 @@ func readAndSync(cfg *AppConfig) error {
 }
 
 var (
-	ErrZeroTime  = errors.New("zero time")
-	ErrZeroUUID  = errors.New("zero uuid")
-	ErrEmtyLabel = errors.New("empty label")
+	ErrZeroTime      = errors.New("zero time")
+	ErrZeroUUID      = errors.New("zero uuid")
+	ErrEmtyLabel     = errors.New("empty label")
+	ErrInvalidFields = errors.New("invalid fields")
 )
 
 func parseLine(line string) (*labelLine, error) {
-	var (
-		fv    int64
-		label string
-		id    string
-	)
+	fields := strings.Split(line, "|")
+	if len(fields) != 3 {
+		return nil, fmt.Errorf("split fields: %w", ErrInvalidFields)
+	}
 
-	if _, err := fmt.Sscanf(line, "%d|%s|%s", &fv, &id, &label); err != nil {
-		return nil, fmt.Errorf("scanf: %w", err)
+	fv, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parse int: %w", err)
 	}
 
 	fvTime := time.Unix(fv, 0)
@@ -90,7 +95,7 @@ func parseLine(line string) (*labelLine, error) {
 		return nil, ErrZeroTime
 	}
 
-	lid, err := uuid.Parse(id)
+	lid, err := uuid.Parse(fields[1])
 	if err != nil {
 		return nil, fmt.Errorf("parse uuid: %w", err)
 	}
@@ -99,13 +104,13 @@ func parseLine(line string) (*labelLine, error) {
 		return nil, ErrZeroUUID
 	}
 
-	if label == "" {
+	if fields[2] == "" {
 		return nil, ErrEmtyLabel
 	}
 
 	return &labelLine{
 		firstVisit: fvTime,
-		label:      label,
+		label:      fields[2],
 		labelID:    lid,
 	}, nil
 }
@@ -117,10 +122,10 @@ func syncLabel(ctx context.Context, tx pgx.Tx, ll *labelLine) error {
 	sqlInsertLabel := `
 INSERT INTO 
 		%s 
-	(label, label_id, first_visit, update_time) 
+	(label, label_id, first_visit, partner_id, update_time) 
 VALUES 
-	($1, $2, $3, NOW() AT TIME ZONE 'UTC')
-ON CONFLICT (label_id) DO NOTHING
+	($1, $2, $3, $4, NOW() AT TIME ZONE 'UTC')
+ON CONFLICT (label_id, partner_id, first_visit) DO NOTHING
 `
 
 	if _, err := tx.Exec(ctx,
@@ -128,7 +133,7 @@ ON CONFLICT (label_id) DO NOTHING
 			sqlInsertLabel,
 			(pgx.Identifier{"head", "start_labels"}).Sanitize(),
 		),
-		ll.label, ll.labelID, ll.firstVisit,
+		ll.label, ll.labelID, ll.firstVisit, ll.partnerID,
 	); err != nil {
 		return fmt.Errorf("insert brigade_id: %w", err)
 	}

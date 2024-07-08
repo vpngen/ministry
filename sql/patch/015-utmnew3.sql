@@ -3,7 +3,9 @@ BEGIN;
 SELECT _v.assert_user_is_superuser();
 SELECT _v.register_patch(  '015-utmnew3', ARRAY['001-init', '002-roles', '003-patch', '004-realms','005-updates', '006-split-realms', '007-split-partners', '008-utm','009-roles', '010-utm', '011-fixes', '012-roles', '013-utmnew', '014-utmnew2']);
 
-ALTER TABLE head.start_labels ALTER COLUMN brigade_id DROP NOT NULL;
+ALTER TABLE :"schema_name".start_labels ALTER COLUMN brigade_id DROP NOT NULL;
+CREATE INDEX start_labels_brigade_id_idx ON :"schema_name".start_labels (brigade_id);
+
 ALTER TABLE :"schema_name".start_labels ADD COLUMN partner_id UUID DEFAULT NULL REFERENCES :"schema_name".partners(partner_id);
 
 WITH last_partner_actions AS (

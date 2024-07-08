@@ -101,6 +101,7 @@ type ActionsUpdate struct {
 // StartLabelsUpdate - is a struct of a table start_labels.
 type StartLabelsUpdate struct {
 	BrigadeID  string    `json:"brigade_id,omitempty"`
+	PartnerID  string    `json:"partner_id"`
 	LabelID    string    `json:"label_id"`
 	Label      string    `json:"label"`
 	CreatedAt  time.Time `json:"created_at,omitempty"`
@@ -825,7 +826,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 
 	sqlGetStartLabels := `
 	SELECT
-		brigade_id, created_at, label_id, label, first_visit, update_time
+		brigade_id, created_at, partner_id, label_id, label, first_visit, update_time
 	FROM 
 		%s 
 	WHERE 
@@ -848,6 +849,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 	var (
 		updates    = []StartLabelsUpdate{}
 		brigadeID  pgtype.UUID
+		partnerID  uuid.UUID
 		createdAt  pgtype.Timestamp
 		labelID    uuid.UUID
 		label      string
@@ -860,6 +862,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 		[]any{
 			&brigadeID,
 			&createdAt,
+			&partnerID,
 			&labelID,
 			&label,
 			&firstVisit,
@@ -868,6 +871,7 @@ func queryStartLabelsUpdates(db *pgxpool.Pool, schema string, lastUpdate time.Ti
 		func() error {
 			l := StartLabelsUpdate{
 				LabelID:    labelID.String(),
+				PartnerID:  partnerID.String(),
 				Label:      label,
 				FirstVisit: firstVisit,
 				UpdateTime: updateTime,

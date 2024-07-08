@@ -43,4 +43,6 @@ ALTER TABLE :"schema_name".start_labels ALTER COLUMN partner_id SET NOT NULL;
 ALTER TABLE :"schema_name".start_labels DROP CONSTRAINT start_labels_pkey;
 ALTER TABLE :"schema_name".start_labels ADD CONSTRAINT start_labels_pkey PRIMARY KEY (label_id, partner_id, first_visit);
 
+CREATE INDEX start_labels_label_idx ON :"schema_name".start_labels (label);
+
 COMMIT;

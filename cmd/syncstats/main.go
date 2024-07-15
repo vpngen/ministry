@@ -178,6 +178,8 @@ func main() {
 		log.Fatalf("Can't fetch last updates: %s", err)
 	}
 
+	now := time.Now().UTC()
+
 	realms, err := syncRealms(db, schema, lastUpdates.UpdateTimeRealms)
 	if err != nil {
 		log.Fatalf("Sync realms: %s", err)
@@ -235,7 +237,7 @@ func main() {
 		ActionsUpdates:         actions,
 		StartLabelsUpdates:     startLabels,
 		UpdatesFrom:            lastUpdates,
-		UpdateTime:             time.Now().UTC(),
+		UpdateTime:             now,
 	}
 
 	if dryRun {

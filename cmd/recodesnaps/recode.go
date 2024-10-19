@@ -415,6 +415,20 @@ func recodeUser(user *storage.User, routerPub *[naclkey.NaclBoxKeyLength]byte, o
 		user.OutlineSecretRouterEnc = base64.StdEncoding.EncodeToString(outlineSecretRouterEnc)
 	}
 
+	if user.Proto0SecretShufflerEnc != "" {
+		proto0SecretShufflerEnc, err := base64.StdEncoding.DecodeString(user.Proto0SecretShufflerEnc)
+		if err != nil {
+			return fmt.Errorf("decode proto0 secret: %w", err)
+		}
+
+		proto0SecretRouterEnc, err := reEncodeNACL(proto0SecretShufflerEnc, routerPub, opts.masterPrivKey)
+		if err != nil {
+			return fmt.Errorf("re-encode proto0 secret: %w", err)
+		}
+
+		user.Proto0SecretRouterEnc = base64.StdEncoding.EncodeToString(proto0SecretRouterEnc)
+	}
+
 	return nil
 }
 

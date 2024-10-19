@@ -62,6 +62,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/synclabels
+  dst: /opt/vg-head-vpnapi/synclabels
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: ministry/scripts/delete_brigadier.sh
   dst: /opt/vg-head-vpnapi/delete_brigadier.sh
   file_info:

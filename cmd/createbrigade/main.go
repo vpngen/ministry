@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/keydesk/keydesk"
 	"github.com/vpngen/ministry"
@@ -40,7 +41,7 @@ const (
 func main() {
 	var w io.WriteCloser
 
-	chunked, jout, token, label, err := parseArgs()
+	chunked, jout, token, label, labelID, fv, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -79,7 +80,7 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, label)
+	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, label, labelID, fv)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
@@ -183,27 +184,39 @@ func readConfigs() (string, string, string, error) {
 	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
-func parseArgs() (bool, bool, []byte, string, error) {
+func parseArgs() (bool, bool, []byte, string, string, int64, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 	jout := flag.Bool("j", false, "json output")
 	label := flag.String("l", "", "label")
+	labelID := flag.String("lu", "", "label UUID")
+	labelTime := flag.Int("lt", 0, "first visit")
 
 	flag.Parse()
 
 	if *label != "" && len(*label) > maxStartLabelLen {
-		return false, false, nil, "", fmt.Errorf("label: %w", ErrLabelTooLong)
+		return false, false, nil, "", "", 0, fmt.Errorf("label: %w", ErrLabelTooLong)
+	}
+
+	id := *labelID
+	if id == "" {
+		id = uuid.New().String()
+	}
+
+	firstVisit := *labelTime
+	if firstVisit <= 0 {
+		firstVisit = int(time.Now().Unix())
 	}
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return false, false, nil, "", fmt.Errorf("access token: %w", ErrEmptyAccessToken)
+		return false, false, nil, "", "", 0, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return false, false, nil, "", fmt.Errorf("access token: %w", err)
+		return false, false, nil, "", "", 0, fmt.Errorf("access token: %w", err)
 	}
 
-	return *chunked, *jout, token, *label, nil
+	return *chunked, *jout, token, *label, id, int64(firstVisit), nil
 }

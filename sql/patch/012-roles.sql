@@ -17,4 +17,3 @@ TO
         :"head_migration_dbuser";
 
 COMMIT;
-COMMIT;

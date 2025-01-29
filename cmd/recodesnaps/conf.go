@@ -28,6 +28,7 @@ type cfg struct {
 	snapfile     string
 	reservConfig string
 	planfile     string
+	mapfile      string
 
 	home string
 
@@ -46,6 +47,7 @@ type opts struct {
 	snapfile   string
 	reservfile string
 	planfile   string
+	mapfile    string
 
 	force  bool
 	mirror bool
@@ -111,8 +113,9 @@ func conf() (*opts, error) {
 		reservfile: c.reservConfig,
 		planfile:   c.planfile,
 
-		force:  c.force,
-		mirror: c.mirror,
+		force:   c.force,
+		mirror:  c.mirror,
+		mapfile: c.mapfile,
 	}, nil
 }
 
@@ -158,6 +161,7 @@ func parseArgs(c *cfg) error {
 	fp := flag.String("tfp", "", "target realm key fingerprint")
 	force := flag.Bool("force", false, "force ignore snapshot errors")
 	mirror := flag.Bool("mirror", false, "mirror mode. Only same IP addresses on both sides are allowed")
+	mapfile := flag.String("map", "", "mapping file. Ovewright mirror. Default: none")
 
 	flag.Parse()
 
@@ -174,6 +178,7 @@ func parseArgs(c *cfg) error {
 	c.targetRealmFP = *fp
 	c.force = *force
 	c.mirror = *mirror
+	c.mapfile = *mapfile
 
 	return nil
 }

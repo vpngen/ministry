@@ -20,7 +20,7 @@ import (
 
 var ErrUnexpectedSnapsEnd = fmt.Errorf("unexpected snaps end")
 
-func createRestorePlan(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationConfig, opts *opts) (*dcmgmt.RestorePlan, error) {
+func createRestorePlan(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationConfig, mapping map[string]string, opts *opts) (*dcmgmt.RestorePlan, error) {
 	epsk, err := base64.StdEncoding.DecodeString(data.EncryptedPreSharedSecret)
 	if err != nil {
 		return nil, fmt.Errorf("decode epsk: %w", err)
@@ -31,8 +31,15 @@ func createRestorePlan(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationC
 		return nil, fmt.Errorf("decrypt psk: %w", err)
 	}
 
-	switch opts.mirror {
-	case true:
+	switch {
+	case mapping != nil:
+		plan, err := createRestorePlanMapped(data, reservConfig, mapping, opts, psk)
+		if err != nil {
+			return nil, fmt.Errorf("create mirrored plan: %w", err)
+		}
+
+		return plan, nil
+	case opts.mirror:
 		plan, err := createRestorePlanMirrored(data, reservConfig, opts, psk)
 		if err != nil {
 			return nil, fmt.Errorf("create mirrored plan: %w", err)
@@ -59,6 +66,86 @@ var (
 	ErrMirroredIPNotFound   = fmt.Errorf("mirrored ip not found")
 	ErrMirroredIPDuplicated = fmt.Errorf("mirrored ip duplicated")
 )
+
+func createRestorePlanMapped(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationConfig, mapping map[string]string,
+	opts *opts, psk []byte,
+) (*dcmgmt.RestorePlan, error) {
+	nodes := make(map[string]*prepNode)
+
+	for _, snap := range data.Snaps {
+		brigade, err := decodeEncryptedBrigade(snap, psk, opts)
+		if err != nil {
+			return nil, fmt.Errorf("decode brigade: %w", err)
+		}
+
+		addr, ok := mapping[snap.BrigadeID]
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrMirroredIPNotFound, snap.BrigadeID)
+		}
+
+		var node *prepNode
+
+		ok = false
+
+		for _, ctrl := range reservConfig.Plan {
+			for _, slot := range ctrl.Slots {
+				if slot == addr {
+					node, ok = nodes[ctrl.ControlIP]
+					if !ok {
+						routerPub, err := naclkey.UnmarshalPublicKey([]byte(ctrl.RouterNACLPubKey))
+						if err != nil {
+							return nil, fmt.Errorf("unmarshal router public key: %w", err)
+						}
+
+						nodeConfig := &dcmgmt.RestoreNodeConfig{
+							ControlIP: ctrl.ControlIP,
+							Snaps:     make([]dcmgmt.PreparedSnap, 0, len(ctrl.Slots)),
+						}
+
+						node = &prepNode{
+							config: nodeConfig,
+							pubkey: routerPub,
+							used:   make(map[string]struct{}),
+						}
+
+						nodes[ctrl.ControlIP] = node
+					}
+				}
+			}
+		}
+
+		if node == nil {
+			return nil, fmt.Errorf("%w: %s", ErrMirroredIPNotFound, addr)
+		}
+
+		if _, ok := node.used[addr]; ok {
+			return nil, fmt.Errorf("%w: %s: %s", ErrMirroredIPDuplicated, addr, brigade.BrigadeID)
+		}
+
+		snap, err := encodeEncryptedBrigade(brigade, addr, reservConfig.ReservationID, &node.pubkey, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "encode brigade: %s\n", err)
+
+			continue
+			// return nil, fmt.Errorf("encode brigade: %w", err)
+		}
+
+		node.config.Snaps = append(node.config.Snaps, *snap)
+
+		node.used[addr] = struct{}{}
+	}
+
+	plan := &dcmgmt.RestorePlan{
+		ReservationID: reservConfig.ReservationID,
+		RealmFP:       opts.targetRealmFP,
+	}
+
+	for _, node := range nodes {
+		plan.Plan = append(plan.Plan, *node.config)
+	}
+
+	return plan, nil
+}
 
 func createRestorePlanMirrored(data *dcmgmt.AggrSnaps, reservConfig *dcmgmt.ReservationConfig,
 	opts *opts, psk []byte,

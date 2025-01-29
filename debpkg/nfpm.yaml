@@ -160,6 +160,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/recodesnapmap
+  dst: /opt/vg-head-vpnapi/recodesnapmap
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: ministry/cmd/switchremotemigr/switch_remote_migr.sh
   dst: /opt/vg-head-vpnapi/switch_remote_migr.sh
   file_info:

@@ -25,7 +25,7 @@ import (
 var ErrServiceTemporarilyUnavailable = errors.New("service temporarily unavailable")
 
 // ReplaceBrigadier - replaces brigadier.
-func ReplaceBrigadier(ctx context.Context, db *pgxpool.Pool, schema string, tag string,
+func ReplaceBrigadier(ctx context.Context, db *pgxpool.Pool, tag string,
 	sshconf *ssh.ClientConfig,
 	brigadeID uuid.UUID,
 ) (*dcmgmt.Answer, error) {
@@ -36,7 +36,7 @@ func ReplaceBrigadier(ctx context.Context, db *pgxpool.Pool, schema string, tag 
 
 	defer tx.Rollback(ctx)
 
-	realmID, addr, active, err := fetchBrigadeRealm(ctx, tx, schema, brigadeID)
+	realmID, addr, active, err := fetchBrigadeRealm(ctx, tx, brigadeID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch realm: %w", err)
 	}
@@ -53,15 +53,15 @@ func ReplaceBrigadier(ctx context.Context, db *pgxpool.Pool, schema string, tag 
 	return vpnconf, nil
 }
 
-func fetchBrigadeRealm(ctx context.Context, tx pgx.Tx, schema string, brigadeID uuid.UUID,
+func fetchBrigadeRealm(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID,
 ) (uuid.UUID, netip.AddrPort, bool, error) {
 	sqlSelectRealm := `
 	SELECT
 		r.realm_id, r.control_ip, r.is_active
 	FROM
-		%s AS b					   	-- brigadiers
-		JOIN %s AS br ON br.brigade_id=b.brigade_id	-- brigadier_realms
-		JOIN %s AS r ON r.realm_id=br.realm_id		-- realms
+		head.brigadiers AS b					   	-- brigadiers
+		JOIN head.brigadier_realms AS br ON br.brigade_id=b.brigade_id	-- brigadier_realms
+		JOIN head.realms AS r ON r.realm_id=br.realm_id		-- realms
 	WHERE
 		b.brigade_id=$1
 	AND
@@ -73,13 +73,7 @@ func fetchBrigadeRealm(ctx context.Context, tx pgx.Tx, schema string, brigadeID 
 		ip     netip.Addr
 		active bool
 	)
-	if err := tx.QueryRow(ctx, fmt.Sprintf(sqlSelectRealm,
-		pgx.Identifier{schema, "brigadiers"}.Sanitize(),
-		pgx.Identifier{schema, "brigadier_realms"}.Sanitize(),
-		pgx.Identifier{schema, "realms"}.Sanitize(),
-	),
-		brigadeID,
-	).Scan(&id, &ip, &active); err != nil {
+	if err := tx.QueryRow(ctx, sqlSelectRealm, brigadeID).Scan(&id, &ip, &active); err != nil {
 		return uuid.Nil, netip.AddrPort{}, false, fmt.Errorf("select: %w", err)
 	}
 

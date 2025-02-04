@@ -32,9 +32,7 @@ const (
 )
 
 const (
-	maxPostgresqlNameLen  = 63
-	defaultDatabaseURL    = "postgresql:///vgdept"
-	defaultBrigadesSchema = "head"
+	defaultDatabaseURL = "postgresql:///vgdept"
 )
 
 var errInvalidArgs = errors.New("invalid args")
@@ -55,7 +53,7 @@ func main() {
 		w = os.Stdout
 	}
 
-	sshKeyFilename, dbURL, schema, err := readConfigs()
+	sshKeyFilename, dbURL, err := readConfigs()
 	if err != nil {
 		fatal(w, jout, "Can't read configs: %s\n", err)
 	}
@@ -72,8 +70,8 @@ func main() {
 
 	ctx := context.Background()
 
-	brigadeID, partnerID, person, del, delTime, delReason, err := core.CheckBrigadier(
-		ctx, db, schema, seedExtra, name, mnemo,
+	brigadeID, partnerID, person, del, delTime, delReason, lastRestore, err := core.CheckBrigadier(
+		ctx, db, seedExtra, name, mnemo,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -94,7 +92,11 @@ func main() {
 			return
 		}
 
-		vpnconf, err = core.ComposeBrigade(ctx, db, schema, sshconf, LogTag, partnerID, brigadeID, name, person)
+		if !lastRestore.IsZero() && lastRestore.After(time.Now().UTC().AddDate(0, -1, 0)) {
+			tooEarly(w, jout, "Last Restore: %s\n", lastRestore.UTC().Format(time.RFC3339))
+		}
+
+		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, name, person)
 		if err != nil {
 			fatal(w, jout, "%s: Can't bless brigade: %s\n", LogTag, err)
 		}
@@ -105,7 +107,7 @@ func main() {
 			return
 		}
 
-		vpnconf, err = core.ReplaceBrigadier(ctx, db, schema, LogTag, sshconf, brigadeID)
+		vpnconf, err = core.ReplaceBrigadier(ctx, db, LogTag, sshconf, brigadeID)
 		if err != nil {
 			fatal(w, jout, "%s: Can't replace brigade: %s\n", LogTag, err)
 		}
@@ -163,23 +165,18 @@ func main() {
 	}
 }
 
-func readConfigs() (string, string, string, error) {
+func readConfigs() (string, string, error) {
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
 		dbURL = defaultDatabaseURL
 	}
 
-	brigadesSchema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
-	if brigadesSchema == "" {
-		brigadesSchema = defaultBrigadesSchema
-	}
-
 	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
-		return "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
+		return "", "", fmt.Errorf("lookup for ssh key: %w", err)
 	}
 
-	return sshKeyFilename, dbURL, brigadesSchema, nil
+	return sshKeyFilename, dbURL, nil
 }
 
 func parseArgs() (string, string, bool, bool, bool, error) {

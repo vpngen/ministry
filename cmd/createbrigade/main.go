@@ -85,7 +85,7 @@ func main() {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, schema, sshconf, LogTag, partnerID, brigadeID, fullname, person)
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, fullname, person)
 	if err != nil {
 		fatal(w, jout, "%s: Can't request brigade: %s\n", LogTag, err)
 	}

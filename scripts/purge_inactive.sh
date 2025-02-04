@@ -26,7 +26,7 @@ if [ -z "${SSH_KEY}" ]; then
 fi
 
 DAYS=${DAYS:-"1"}
-NUMS=${NUMS:-"1000"}
+NUMS=${NUMS:-"100000"}
 
 VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
 if [ -s "${VIP_BRIGADES_FILE_HOME}" ]; then

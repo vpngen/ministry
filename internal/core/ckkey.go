@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,32 +15,62 @@ import (
 )
 
 // CheckBrigadier checks brigadier by name and mnemonics
-func CheckBrigadier(ctx context.Context, db *pgxpool.Pool, schema string, seed string,
+func CheckBrigadier(ctx context.Context, db *pgxpool.Pool, seed string,
 	name string, mnemo string,
-) (uuid.UUID, uuid.UUID, *namesgenerator.Person, bool, time.Time, string, error) {
+) (uuid.UUID, uuid.UUID, *namesgenerator.Person, bool, time.Time, string, time.Time, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", fmt.Errorf("begin: %w", err)
+		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", time.Time{}, fmt.Errorf("begin: %w", err)
 	}
 
 	defer tx.Rollback(ctx)
 
-	salt, err := saltByName(ctx, tx, schema, name)
+	salt, err := saltByName(ctx, tx, name)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", fmt.Errorf("salt by name: %w", err)
+		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", time.Time{}, fmt.Errorf("salt by name: %w", err)
 	}
 
 	key := seedgenerator.SeedFromSaltMnemonics(mnemo, seed, salt)
 
-	brigadeID, partnerID, person, deleted, deletedTime, deletionReason, err := checkBrigadierByKey(ctx, tx, schema, name, key)
+	brigadeID, partnerID, person, deleted, deletedTime, deletionReason, err := checkBrigadierByKey(ctx, tx, name, key)
 	if err != nil {
-		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", fmt.Errorf("check brigadier: %w", err)
+		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", time.Time{}, fmt.Errorf("check brigadier: %w", err)
 	}
 
-	return brigadeID, partnerID, person, deleted, deletedTime, deletionReason, nil
+	lastRestore, err := checkLastRestore(ctx, tx, brigadeID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, nil, false, time.Time{}, "", time.Time{}, fmt.Errorf("check last restore: %w", err)
+	}
+
+	return brigadeID, partnerID, person, deleted, deletedTime, deletionReason, lastRestore, nil
 }
 
-func checkBrigadierByKey(ctx context.Context, tx pgx.Tx, schema string, name string, key []byte,
+func checkLastRestore(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (time.Time, error) {
+	var lastRestore pgtype.Timestamp
+
+	sqlLastRestore := `
+	SELECT
+		event_time
+	FROM 
+		head.brigades_actions
+	WHERE
+		brigade_id=$1
+	AND
+		event_name='restore_brigade'
+	`
+
+	if err := tx.QueryRow(ctx, sqlLastRestore, brigadeID).Scan(&lastRestore); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return time.Time{}, nil
+		}
+
+		return time.Time{}, fmt.Errorf("last restore: %w", err)
+	}
+
+	return lastRestore.Time, nil
+}
+
+func checkBrigadierByKey(ctx context.Context, tx pgx.Tx, name string, key []byte,
 ) (uuid.UUID, uuid.UUID, *namesgenerator.Person, bool, time.Time, string, error) {
 	var (
 		brigadeID      uuid.UUID
@@ -56,10 +87,10 @@ func checkBrigadierByKey(ctx context.Context, tx pgx.Tx, schema string, name str
 		bp.partner_id,
 		db.deleted_at,
 		db.reason
-	FROM %s b
-	JOIN %s bk ON bk.brigade_id=b.brigade_id
-	JOIN %s bp ON b.brigade_id=bp.brigade_id
-	LEFT JOIN %s db ON b.brigade_id=db.brigade_id
+	FROM head.brigadiers b
+	JOIN head.brigadier_keys bk ON bk.brigade_id=b.brigade_id
+	JOIN head.brigadier_partners bp ON b.brigade_id=bp.brigade_id
+	LEFT JOIN head.deleted_brigadiers db ON b.brigade_id=db.brigade_id
 	WHERE
 		b.brigadier=$1
 	AND
@@ -67,12 +98,7 @@ func checkBrigadierByKey(ctx context.Context, tx pgx.Tx, schema string, name str
 	`
 
 	if err := tx.QueryRow(ctx,
-		fmt.Sprintf(sqlSaltByName,
-			pgx.Identifier{schema, "brigadiers"}.Sanitize(),
-			pgx.Identifier{schema, "brigadier_keys"}.Sanitize(),
-			pgx.Identifier{schema, "brigadier_partners"}.Sanitize(),
-			pgx.Identifier{schema, "deleted_brigadiers"}.Sanitize(),
-		),
+		sqlSaltByName,
 		name,
 		key,
 	).Scan(
@@ -88,23 +114,19 @@ func checkBrigadierByKey(ctx context.Context, tx pgx.Tx, schema string, name str
 	return brigadeID, partnerID, &person, deletedTime.Valid, deletedTime.Time, deletionReason.String, nil
 }
 
-func saltByName(ctx context.Context, tx pgx.Tx, schema, name string) ([]byte, error) {
+func saltByName(ctx context.Context, tx pgx.Tx, name string) ([]byte, error) {
 	var salt []byte
 
 	sqlSaltByName := `SELECT
 		brigadier_salts.salt
-	FROM %s, %s
+	FROM head.brigadier_salts, head.brigadiers
 	WHERE
 		brigadiers.brigadier=$1
 	AND
 		brigadiers.brigade_id=brigadier_salts.brigade_id
 	`
 
-	if err := tx.QueryRow(ctx, fmt.Sprintf(sqlSaltByName,
-		pgx.Identifier{schema, "brigadier_salts"}.Sanitize(),
-		pgx.Identifier{schema, "brigadiers"}.Sanitize()),
-		name,
-	).Scan(&salt); err != nil {
+	if err := tx.QueryRow(ctx, sqlSaltByName, name).Scan(&salt); err != nil {
 		return nil, fmt.Errorf("salt query: %w", err)
 	}
 

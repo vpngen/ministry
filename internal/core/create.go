@@ -40,7 +40,7 @@ var (
 	ErrDraftRealmNotFound    = errors.New("draft realm not found")
 )
 
-func ComposeBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
+func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 	sshconf *ssh.ClientConfig, tag string,
 	partnerID uuid.UUID, brigadeID uuid.UUID,
 	fullname string, person *namesgenerator.Person,
@@ -52,7 +52,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 			return nil, ErrAttemptLimitExceeded
 		}
 
-		realmID, addr, err := defineBrigadeRealm(ctx, db, schema, partnerID, brigadeID)
+		realmID, addr, err := defineBrigadeRealm(ctx, db, partnerID, brigadeID)
 		if err != nil {
 			return nil, fmt.Errorf("define realm: %w", err)
 		}
@@ -70,7 +70,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 			continue
 		}
 
-		if err := promoteBrigadierRealm(ctx, db, schema, brigadeID, realmID); err != nil {
+		if err := promoteBrigadierRealm(ctx, db, brigadeID, realmID); err != nil {
 			return nil, fmt.Errorf("promote realm: %w", err)
 		}
 
@@ -169,7 +169,7 @@ func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag str
 	return wgconf, nil
 }
 
-func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool, schema string,
+func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool,
 	partnerID uuid.UUID, brigadeID uuid.UUID,
 ) (uuid.UUID, netip.AddrPort, error) {
 	tx, err := db.Begin(ctx)
@@ -179,7 +179,7 @@ func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 
 	defer tx.Rollback(ctx)
 
-	ok, err := isBrigadeLocated(ctx, tx, schema, brigadeID)
+	ok, err := isBrigadeLocated(ctx, tx, brigadeID)
 	if err != nil {
 		return uuid.Nil, netip.AddrPort{}, fmt.Errorf("check realm: %w", err)
 	}
@@ -188,12 +188,12 @@ func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 		return uuid.Nil, netip.AddrPort{}, ErrBrigadeAlreadyLocated
 	}
 
-	realmID, addr, err := selectBrigadeRealm(ctx, tx, schema, partnerID, brigadeID)
+	realmID, addr, err := selectBrigadeRealm(ctx, tx, partnerID, brigadeID)
 	if err != nil {
 		return uuid.Nil, netip.AddrPort{}, fmt.Errorf("get realm: %w", err)
 	}
 
-	if err := storeBrigadierDraftRealm(ctx, tx, schema, brigadeID, realmID); err != nil {
+	if err := storeBrigadierDraftRealm(ctx, tx, brigadeID, realmID); err != nil {
 		return uuid.Nil, netip.AddrPort{}, fmt.Errorf("store realm: %w", err)
 	}
 
@@ -204,39 +204,33 @@ func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 	return realmID, addr, nil
 }
 
-func storeBrigadierDraftRealm(ctx context.Context, tx pgx.Tx, schema string,
+func storeBrigadierDraftRealm(ctx context.Context, tx pgx.Tx,
 	brigadeID uuid.UUID, realmID uuid.UUID,
 ) error {
 	sqlStoreRealmRelation := `
 	INSERT INTO
-		%s (brigade_id,	realm_id, featured, draft)
+		head.brigadier_realms (brigade_id,	realm_id, featured, draft)
 	VALUES
 		($1, $2, false, true)
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlStoreRealmRelation, (pgx.Identifier{schema, "brigadier_realms"}.Sanitize())),
-		brigadeID, realmID,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlStoreRealmRelation, brigadeID, realmID); err != nil {
 		return fmt.Errorf("insert rel: %w", err)
 	}
 
 	sqlCreateRealmAction := `
 	INSERT INTO
-		%s (brigade_id, realm_id, event_name, event_info, event_time)
+		head.brigadier_realms_actions (brigade_id, realm_id, event_name, event_info, event_time)
 	VALUES
 		($1, $2, 'order', 'draft', NOW() AT TIME ZONE 'UTC')
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateRealmAction, (pgx.Identifier{schema, "brigadier_realms_actions"}.Sanitize())),
-		brigadeID, realmID,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlCreateRealmAction, brigadeID, realmID); err != nil {
 		return fmt.Errorf("insert action: %w", err)
 	}
 
 	return nil
 }
 
-func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
+func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool,
 	brigadeID uuid.UUID, realmID uuid.UUID,
 ) error {
 	fmt.Fprintf(os.Stderr, "promoteBrigadierRealm: %s %s\n", brigadeID, realmID)
@@ -250,7 +244,7 @@ func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 
 	sqlStoreRealmRelation := `
 	UPDATE
-		%s
+		head.brigadier_realms
 	SET
 		draft=false,
 		featured=true
@@ -258,10 +252,7 @@ func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 		brigade_id=$1
 		AND realm_id=$2
 	`
-	ct, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlStoreRealmRelation, (pgx.Identifier{schema, "brigadier_realms"}.Sanitize())),
-		brigadeID, realmID,
-	)
+	ct, err := tx.Exec(ctx, sqlStoreRealmRelation, brigadeID, realmID)
 	if err != nil {
 		return fmt.Errorf("update rel: %w", err)
 	}
@@ -272,18 +263,15 @@ func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 
 	sqlCreateRealmAction := `
 	INSERT INTO
-		%s (brigade_id, realm_id, event_name, event_info, event_time)
+		head.brigadier_realms_actions (brigade_id, realm_id, event_name, event_info, event_time)
 	VALUES
 		($1, $2, 'modify', 'promote', NOW() AT TIME ZONE 'UTC')
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateRealmAction, (pgx.Identifier{schema, "brigadier_realms_actions"}.Sanitize())),
-		brigadeID, realmID,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlCreateRealmAction, brigadeID, realmID); err != nil {
 		return fmt.Errorf("insert action: %w", err)
 	}
 
-	if err := undeleteBrigadier(ctx, tx, schema, brigadeID); err != nil {
+	if err := undeleteBrigadier(ctx, tx, brigadeID); err != nil {
 		return fmt.Errorf("undelete: %w", err)
 	}
 
@@ -294,18 +282,15 @@ func promoteBrigadierRealm(ctx context.Context, db *pgxpool.Pool, schema string,
 	return nil
 }
 
-func undeleteBrigadier(ctx context.Context, tx pgx.Tx, schema string, brigadeID uuid.UUID) error {
+func undeleteBrigadier(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) error {
 	sqlUndeleteBrigadier := `
 	DELETE FROM
-		%s
+		head.deleted_brigadiers
 	WHERE
 		brigade_id=$1
 	`
 
-	comm, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlUndeleteBrigadier, (pgx.Identifier{schema, "deleted_brigadiers"}.Sanitize())),
-		brigadeID,
-	)
+	comm, err := tx.Exec(ctx, sqlUndeleteBrigadier, brigadeID)
 	if err != nil {
 		return fmt.Errorf("delete: %w", err)
 	}
@@ -318,42 +303,31 @@ func undeleteBrigadier(ctx context.Context, tx pgx.Tx, schema string, brigadeID 
 
 	sqlCreateRealmAction := `
 	INSERT INTO
-		%s (brigade_id, event_name, event_info, event_time)
+		head.brigades_actions (brigade_id, event_name, event_info, event_time)
 	VALUES
 		($1, $2, '', NOW() AT TIME ZONE 'UTC')
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateRealmAction, (pgx.Identifier{schema, "brigades_actions"}.Sanitize())),
-		brigadeID, event,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlCreateRealmAction, brigadeID, event); err != nil {
 		return fmt.Errorf("insert action: %w", err)
 	}
 
 	return nil
 }
 
-func isBrigadeLocated(ctx context.Context, tx pgx.Tx, schema string,
-	brigadeID uuid.UUID,
-) (bool, error) {
+func isBrigadeLocated(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (bool, error) {
 	sqlCheckRealm := `
 	SELECT
 		COUNT(br.realm_id)
 	FROM
-		%s AS br
-		JOIN %s AS r ON r.realm_id=br.realm_id
+		head.brigadier_realms AS br
+		JOIN head.realms AS r ON r.realm_id=br.realm_id
 	WHERE
 		br.brigade_id=$1
 		AND br.draft = false
 	`
 
 	var n int
-	if err := tx.QueryRow(ctx,
-		fmt.Sprintf(sqlCheckRealm,
-			pgx.Identifier{schema, "brigadier_realms"}.Sanitize(),
-			pgx.Identifier{schema, "realms"}.Sanitize(),
-		),
-		brigadeID,
-	).Scan(&n); err != nil {
+	if err := tx.QueryRow(ctx, sqlCheckRealm, brigadeID).Scan(&n); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
@@ -368,18 +342,18 @@ func isBrigadeLocated(ctx context.Context, tx pgx.Tx, schema string,
 	return true, nil
 }
 
-func selectBrigadeRealm(ctx context.Context, tx pgx.Tx, schema string,
+func selectBrigadeRealm(ctx context.Context, tx pgx.Tx,
 	partnerID uuid.UUID, brigadeID uuid.UUID,
 ) (uuid.UUID, netip.AddrPort, error) {
 	sqlSelectRealm := `
 	SELECT
 		r.realm_id, r.control_ip
 	FROM
-		%s AS b					   	-- brigadiers
-		JOIN %s AS bp ON bp.brigade_id=b.brigade_id 	-- brigadier_partners
-		JOIN %s AS pr ON pr.partner_id = bp.partner_id	-- partners_realms
-		JOIN %s AS r ON r.realm_id=pr.realm_id		-- realms
-		LEFT JOIN %s AS br ON br.realm_id=pr.realm_id AND br.brigade_id=b.brigade_id	-- brigadier_realms
+		head.brigadiers AS b					   	-- brigadiers
+		JOIN head.brigadier_partners AS bp ON bp.brigade_id=b.brigade_id 	-- brigadier_partners
+		JOIN head.partners_realms AS pr ON pr.partner_id = bp.partner_id	-- partners_realms
+		JOIN head.realms AS r ON r.realm_id=pr.realm_id		-- realms
+		LEFT JOIN head.brigadier_realms AS br ON br.realm_id=pr.realm_id AND br.brigade_id=b.brigade_id	-- brigadier_realms
 	WHERE
 		b.brigade_id=$1
 		AND pr.partner_id=$2
@@ -394,16 +368,7 @@ func selectBrigadeRealm(ctx context.Context, tx pgx.Tx, schema string,
 		id uuid.UUID
 		ip netip.Addr
 	)
-	if err := tx.QueryRow(ctx, fmt.Sprintf(sqlSelectRealm,
-		pgx.Identifier{schema, "brigadiers"}.Sanitize(),
-		pgx.Identifier{schema, "brigadier_partners"}.Sanitize(),
-		pgx.Identifier{schema, "partners_realms"}.Sanitize(),
-		pgx.Identifier{schema, "realms"}.Sanitize(),
-		pgx.Identifier{schema, "brigadier_realms"}.Sanitize(),
-	),
-		brigadeID,
-		partnerID,
-	).Scan(&id, &ip); err != nil {
+	if err := tx.QueryRow(ctx, sqlSelectRealm, brigadeID, partnerID).Scan(&id, &ip); err != nil {
 		return uuid.Nil, netip.AddrPort{}, fmt.Errorf("select: %w", err)
 	}
 

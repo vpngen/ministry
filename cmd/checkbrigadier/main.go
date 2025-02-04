@@ -37,7 +37,7 @@ func main() {
 		log.Fatalf("Can't parse args: %s\n", err)
 	}
 
-	sshKeyFilename, dbURL, schema, err := readConfigs()
+	sshKeyFilename, dbURL, _, err := readConfigs()
 	if err != nil {
 		log.Fatalf("Can't read configs: %s\n", err)
 	}
@@ -54,7 +54,7 @@ func main() {
 
 	ctx := context.Background()
 
-	brigadeID, partnerID, person, del, delTime, delReason, err := core.CheckBrigadier(ctx, db, schema, seedExtra, name, mnemo)
+	brigadeID, partnerID, person, del, delTime, delReason, _, err := core.CheckBrigadier(ctx, db, seedExtra, name, mnemo)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Fatalf("Invalid mnemonics for brigadier %q\n", name)
@@ -78,7 +78,7 @@ func main() {
 		return
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, schema, sshconf, LogTag, partnerID, brigadeID, name, person)
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, name, person)
 	if err != nil {
 		log.Fatalf("Can't bless brigade: %s", err)
 	}

@@ -138,7 +138,8 @@ if [ -z "${ACTION}" ]; then
                 exit 1
         fi
 
-        flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${bid}" "${REASON}" "go"
+        #flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${bid}" "${REASON}" "go"
+        "${0}" "${bid}" "${REASON}" "go"
         rc=$?
         if [ $rc -ne 0 ]; then
                 echo "[-] Something wrong with deletion: $rc"

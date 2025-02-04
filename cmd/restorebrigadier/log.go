@@ -21,6 +21,13 @@ func setLogTag() string {
 	return filepath.Base(executable)
 }
 
+const tooEarlyString = `{
+	"code" : 425,
+	"desc" : "Too Early",
+	"status" : "error",
+	"message" : "%s"
+}`
+
 const fatalString = `{
 	"code" : 500,
 	"desc" : "Internal Server Error",
@@ -34,6 +41,19 @@ func fatal(w io.Writer, jout bool, format string, args ...any) {
 	switch jout {
 	case true:
 		fmt.Fprintf(w, fatalString, msg)
+	default:
+		fmt.Fprint(w, msg)
+	}
+
+	log.Fatal(msg)
+}
+
+func tooEarly(w io.Writer, jout bool, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+
+	switch jout {
+	case true:
+		fmt.Fprintf(w, tooEarlyString, msg)
 	default:
 		fmt.Fprint(w, msg)
 	}

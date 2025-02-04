@@ -1,5 +1,9 @@
 #!/bin/sh
 
+ppath="$0"
+exec_dir="$(dirname "${ppath}")"
+app_name="$(basename "${ppath}")"
+
 DBNAME=${DBNAME:-"vgdept"}
 SCHEMA=${SCHEMA:-"head"}
 
@@ -22,7 +26,7 @@ if [ -z "${SSH_KEY}" ]; then
 fi
 
 DAYS=${DAYS:-"1"}
-NUMS=${NUMS:-"1000"}
+NUMS=${NUMS:-"100000"}
 
 VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
 if [ -s "${VIP_BRIGADES_FILE_HOME}" ]; then
@@ -34,19 +38,26 @@ if [ -s "${VIP_BRIGADES_FILE_ETC}" ]; then
         VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_ETC}"
 fi
 
-CMD="getwasted inactive -m ${DAYS} -n ${NUMS}"
-echo "GET WASTED: ${CMD}"
 
-purge_per_realm () {
+
+purge_per_igrp () {
         REALM="${1}"
-        realm_id="${2}"
+        igroup="${2}"
         
         if [ -z "${REALM}" ]; then
                 echo "[!]         Realm is empty"
                 exit 1
         fi
 
-        wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${CMD}")
+        if [ -z "${igroup}" ]; then
+                echo "[!]         IGRP is empty"
+                exit 1
+        fi
+
+        ICMD="getwasted inactive -m ${DAYS} -n ${NUMS} -igrp"
+        echo "GET REALM: ${REALM} IGRP: ${igroup} WASTED: ${ICMD}"
+
+        wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${ICMD}" | grep ";${igroup}" | cut -d ';' -f 1)
         rc=$?
         if [ $rc -ne 0 ]; then
                 echo "[-]         Something wrong: $rc"
@@ -98,12 +109,45 @@ EOF
         done
 }
 
+purge_per_realm () {
+        REALM="${1}"
+        
+        if [ -z "${REALM}" ]; then
+                echo "[!]         Realm is empty"
+                exit 1
+        fi
+
+        REALM_CMD="getwasted inactive -m ${DAYS} -n ${NUMS} -igrp"
+        echo "GET REALM: ${REALM} WASTED: ${REALM_CMD}"
+
+        igroups=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${REALM_CMD}" | cut -d ';' -f 2 | sort | uniq)
+        rc=$?
+        if [ $rc -ne 0 ]; then
+                echo "[-]         Something wrong: $rc"
+                exit 1
+        fi
+
+        d="$(date +"%Y%m%d")"
+        mkdir -p "${HOME}/logs/${d}"
+
+        echo "${igroups}" | xargs --verbose -I {} -P 8 sh -c "${ppath}"' '"${REALM}"' {} 2>&1 | tee '"${HOME}/logs/${d}/${app_name}-"'{}-$(date +"%Y%m%d%H%M").logs'
+}
+
+REALM_IP="${1}"
+IGRP_ID="${2}"
+
+if [ -n "${REALM_IP}" ] && [ -n "${IGRP_ID}" ]; then
+        purge_per_igrp "${REALM_IP}" "${IGRP_ID}"
+
+        exit 0
+fi
+
 realms=$(psql -d "${DBNAME}" \
         -q -t -A --csv \
         --set ON_ERROR_STOP=yes \
         --set schema_name="${SCHEMA}" << EOF
         SELECT 
-                realm_id,control_ip 
+                control_ip 
         FROM 
                 :"schema_name".realms 
         WHERE 
@@ -112,9 +156,6 @@ EOF
 )
 
 for realm in ${realms}; do
-        realm_id=$(echo "${realm}" | cut -d ',' -f 1)
-        control_ip=$(echo "${realm}" | cut -d ',' -f 2)
-
-        echo "[+]     Realm: ${realm_id} control_ip: ${control_ip}"
-        purge_per_realm "${control_ip}" "${realm_id}"
+        echo "[+]     Realm: ${realm}"
+        purge_per_realm "${realm}" 
 done

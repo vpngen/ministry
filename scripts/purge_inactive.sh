@@ -25,7 +25,7 @@ if [ -z "${SSH_KEY}" ]; then
         fi
 fi
 
-DAYS=${DAYS:-"1"}
+DAYS=${DAYS:-"7"}
 NUMS=${NUMS:-"100000"}
 
 VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
@@ -54,7 +54,7 @@ purge_per_igrp () {
                 exit 1
         fi
 
-        ICMD="getwasted inactive -m ${DAYS} -n ${NUMS} -igrp"
+        ICMD="getwasted inactive -d ${DAYS} -n ${NUMS} -igrp"
         echo "GET REALM: ${REALM} IGRP: ${igroup} WASTED: ${ICMD}"
 
         wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${ICMD}" | grep ";${igroup}" | cut -d ';' -f 1)

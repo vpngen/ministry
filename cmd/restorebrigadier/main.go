@@ -94,6 +94,8 @@ func main() {
 
 		if !lastRestore.IsZero() && lastRestore.After(time.Now().UTC().AddDate(0, -1, 0)) {
 			tooEarly(w, jout, "Last Restore: %s\n", lastRestore.UTC().Format(time.RFC3339))
+
+			return
 		}
 
 		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, name, person)

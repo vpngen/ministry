@@ -58,5 +58,7 @@ func tooEarly(w io.Writer, jout bool, format string, args ...any) {
 		fmt.Fprint(w, msg)
 	}
 
-	log.Fatal(msg)
+	log.Print(msg)
+
+	os.Exit(0)
 }

@@ -1,11 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+
+	dcmgmt "github.com/vpngen/dc-mgmt"
+	"github.com/vpngen/keydesk/keydesk"
+	"github.com/vpngen/ministry"
 )
 
 var LogTag = setLogTag()
@@ -21,26 +27,30 @@ func setLogTag() string {
 	return filepath.Base(executable)
 }
 
-const tooEarlyString = `{
-	"code" : 425,
-	"desc" : "Too Early",
-	"status" : "error",
-	"message" : "%s"
-}`
-
-const fatalString = `{
-	"code" : 500,
-	"desc" : "Internal Server Error",
-	"status" : "error",
-	"message" : "%s"
-}`
-
 func fatal(w io.Writer, jout bool, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 
 	switch jout {
 	case true:
-		fmt.Fprintf(w, fatalString, msg)
+		answ := ministry.Answer{
+			Answer: dcmgmt.Answer{
+				Answer: keydesk.Answer{
+					Code:    http.StatusInternalServerError,
+					Desc:    http.StatusText(http.StatusInternalServerError),
+					Status:  keydesk.AnswerStatusError,
+					Message: msg,
+				},
+			},
+		}
+
+		payload, err := json.Marshal(answ)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: Can't marshal answer: %s\n", LogTag, err)
+		}
+
+		if _, err := w.Write(payload); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: Can't write answer: %s\n", LogTag, err)
+		}
 	default:
 		fmt.Fprint(w, msg)
 	}
@@ -53,7 +63,25 @@ func tooEarly(w io.Writer, jout bool, format string, args ...any) {
 
 	switch jout {
 	case true:
-		fmt.Fprintf(w, tooEarlyString, msg)
+		answ := ministry.Answer{
+			Answer: dcmgmt.Answer{
+				Answer: keydesk.Answer{
+					Code:    http.StatusTooEarly,
+					Desc:    http.StatusText(http.StatusTooEarly),
+					Status:  keydesk.AnswerStatusError,
+					Message: msg,
+				},
+			},
+		}
+
+		payload, err := json.Marshal(answ)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: Can't marshal answer: %s\n", LogTag, err)
+		}
+
+		if _, err := w.Write(payload); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: Can't write answer: %s\n", LogTag, err)
+		}
 	default:
 		fmt.Fprint(w, msg)
 	}

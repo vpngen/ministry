@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ppath="$0"
-exec_dir="$(dirname "${ppath}")"
+#exec_dir="$(dirname "${ppath}")"
 app_name="$(basename "${ppath}")"
 
 DBNAME=${DBNAME:-"vgdept"}
@@ -117,7 +117,7 @@ purge_per_realm () {
                 exit 1
         fi
 
-        REALM_CMD="getwasted inactive -m ${DAYS} -n ${NUMS} -igrp"
+        REALM_CMD="getwasted inactive -d ${DAYS} -n ${NUMS} -igrp"
         echo "GET REALM: ${REALM} WASTED: ${REALM_CMD}"
 
         igroups=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${REALM_CMD}" | cut -d ';' -f 2 | sort | uniq)

@@ -57,6 +57,9 @@ func checkLastRestore(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (time
 		brigade_id=$1
 	AND
 		event_name='restore_brigade'
+	ORDER BY
+		event_time DESC
+	LIMIT 1
 	`
 
 	if err := tx.QueryRow(ctx, sqlLastRestore, brigadeID).Scan(&lastRestore); err != nil {

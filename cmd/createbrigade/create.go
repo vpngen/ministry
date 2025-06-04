@@ -134,6 +134,7 @@ func storeBrigadierSaltKey(ctx context.Context, tx pgx.Tx, schema string, id uui
 }
 
 func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uuid.UUID,
+	forcePerson *namesgenerator.Person, customName string,
 ) (string, *namesgenerator.Person, error) {
 	sqlCreateBrigadier := `
 	INSERT INTO
@@ -148,17 +149,39 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 
 	cnt := 0
 	for {
+		var (
+			fullname string
+			person   *namesgenerator.Person
+		)
 
 		if cnt++; cnt > maxCollisionAttemts {
 			return "", nil, fmt.Errorf("create brigadier: %w: %d", ErrMaxCollisions, cnt)
 		}
 
-		fullname, person, err := namesgenerator.PhysicsAwardeeShort()
-		if err != nil {
-			return "", nil, fmt.Errorf("physics generate: %s", err)
+		switch customName {
+		case "":
+			fullnameNew, personNew, err := namesgenerator.PhysicsAwardeeShort()
+			if err != nil {
+				return "", nil, fmt.Errorf("physics generate: %s", err)
+			}
+
+			fullname = fullnameNew
+			person = &personNew
+		default:
+			fullname = customName
+			if forcePerson != nil {
+				person = forcePerson
+				break
+			}
+
+			person = &namesgenerator.Person{
+				Name: fullname,
+				Desc: "Я люблю делать то, что не пройдет цензуру",
+				URL:  "https://vpngen.com",
+			}
 		}
 
-		err = func() error {
+		if err := func() error {
 			stx, e := tx.Begin(ctx)
 			if e != nil {
 				return fmt.Errorf("sub begin: %w", e)
@@ -175,12 +198,15 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 			}
 
 			return nil
-		}()
-		if err != nil {
+		}(); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
 				switch pgErr.ConstraintName {
 				case "brigadiers_brigadier_key":
+					if customName != "" {
+						return "", nil, fmt.Errorf("create custom brigadier: %w: %s", pgErr, customName)
+					}
+
 					continue
 				default:
 					return "", nil, fmt.Errorf("create brigadier: %w", pgErr)
@@ -188,7 +214,7 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 			}
 		}
 
-		return fullname, &person, nil
+		return fullname, person, nil
 	}
 }
 
@@ -267,6 +293,7 @@ func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
 
 func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 	partnerID uuid.UUID, creationInfo string,
+	forcePerson *namesgenerator.Person, customName string,
 	label string, labelID string, firstVisit int64,
 ) (uuid.UUID, string, string, *namesgenerator.Person, error) {
 	tx, err := db.Begin(ctx)
@@ -281,7 +308,7 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 		return uuid.Nil, "", "", nil, fmt.Errorf("select brigade id: %w", err)
 	}
 
-	fullname, person, err := defineBrigadierPerson(ctx, tx, schema, id)
+	fullname, person, err := defineBrigadierPerson(ctx, tx, schema, id, forcePerson, customName)
 	if err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("select brigadier person: %w", err)
 	}

@@ -233,5 +233,15 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 		}
 	}
 
-	return person, *customName, *chunked, *jout, token, *label, id, int64(firstVisit), nil
+	var fullname string
+	if *customName != "" {
+		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*customName)
+		if err != nil {
+			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("custom name: %w", err)
+		}
+
+		fullname = string(buf)
+	}
+
+	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), nil
 }

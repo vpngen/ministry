@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -35,8 +36,15 @@ const (
 	defaultBrigadesSchema = "head"
 )
 
+const brigadeCreationType = "ssh_api"
+
 const (
 	maxStartLabelLen = 64
+)
+
+var (
+	ErrEmptyAccessToken = errors.New("token not specified")
+	ErrLabelTooLong     = errors.New("label too long")
 )
 
 func main() {
@@ -81,12 +89,12 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, person, fullname, label, labelID, fv)
+	brigadeID, mnemo, fullname, person, err := core.CreateBrigade(ctx, db, seedExtra, partnerID, brigadeCreationType, person, fullname, label, labelID, fv)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, fullname, person)
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
 	if err != nil {
 		fatal(w, jout, "%s: Can't request brigade: %s\n", LogTag, err)
 	}

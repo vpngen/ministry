@@ -63,6 +63,29 @@ purge_per_realm () {
 
                 echo "delete ${bid}"
 
+                vip=$(psql -d "${DBNAME}" -q -t -A \
+                --set ON_ERROR_STOP=yes \
+                --set brigade_id="${bid}" \
+                --set schema_name="${SCHEMA}" <<EOF
+                SELECT 
+                        COUNT(*)
+                FROM 
+                        :"schema_name".brigadier_vip
+                WHERE 
+                        brigade_id = :'brigade_id'
+EOF
+)
+                rc=$?
+                if [ $rc -ne 0 ]; then
+                        echo "[-]         Something wrong with db: $rc"
+                        continue
+                fi
+
+                if [ -n "${vip}" ] && [ "${vip}" -ne 0 ]; then
+                        echo "[-]         Brigade is not ready for deletion. Is VIP."
+                        continue
+                fi
+
                 count=$(psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${bid}" \

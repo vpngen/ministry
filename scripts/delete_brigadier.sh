@@ -90,8 +90,10 @@ BEGIN;
         FROM
                 :"schema_name".brigadier_realms br
         JOIN 	:"schema_name".realms r ON br.realm_id = r.realm_id
+        LEFT JOIN  :"schema_name".brigadier_vip bv ON br.brigade_id = bv.brigade_id 
         WHERE
                 br.brigade_id = :'brigade_id'
+                AND bv.brigade_id IS NULL
         ;
 COMMIT;
 EOF

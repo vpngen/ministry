@@ -50,6 +50,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/ckvip
+  dst: /opt/vg-head-vpnapi/ckvip
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: bin/createbrigade
   dst: /opt/vg-head-vpnapi/createbrigade
   file_info:

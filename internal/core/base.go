@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -16,40 +16,30 @@ import (
 
 const maxCollisionAttemts = 1000
 
-var (
-	ErrEmptyAccessToken = errors.New("token not specified")
-	ErrAccessDenied     = errors.New("access denied")
-	ErrMaxCollisions    = errors.New("max collision attempts")
-	ErrLabelTooLong     = errors.New("label too long")
-)
+var ErrMaxCollisions = errors.New("max collision attempts")
 
-const brigadeCreationType = "ssh_api"
-
-func createBrigadeEvent(ctx context.Context, tx pgx.Tx, schema string, id uuid.UUID, info string) error {
+func createBrigadeEvent(ctx context.Context, tx pgx.Tx, id uuid.UUID, info string) error {
 	sqlCreateBrigadeEvent := `
 	INSERT INTO
-		%s (brigade_id,	event_name, event_info,	event_time)
+		head.brigades_actions (brigade_id,	event_name, event_info,	event_time)
 	VALUES
 		($1, 'create_brigade',	$2, NOW() AT TIME ZONE 'UTC')
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateBrigadeEvent, (pgx.Identifier{schema, "brigades_actions"}.Sanitize())),
-		id, info,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlCreateBrigadeEvent, id, info); err != nil {
 		return fmt.Errorf("create brigade event: %w", err)
 	}
 
 	return nil
 }
 
-func storeBrigadierPartner(ctx context.Context, tx pgx.Tx, schema string,
+func storeBrigadierPartner(ctx context.Context, tx pgx.Tx,
 	id uuid.UUID, partnerID uuid.UUID,
 ) error {
 	sqlSelectPartner := `
 		SELECT 
 			p.partner_id
 		FROM 
-			%s AS p 					-- partners
+			head.partners AS p 					-- partners
 		WHERE
 			p.partner_id=$1
 			AND p.is_active=true
@@ -58,47 +48,34 @@ func storeBrigadierPartner(ctx context.Context, tx pgx.Tx, schema string,
 		`
 
 	var pid uuid.UUID
-	if err := tx.QueryRow(
-		ctx,
-		fmt.Sprintf(
-			sqlSelectPartner,
-			pgx.Identifier{schema, "partners"}.Sanitize(),
-		),
-		partnerID,
-	).Scan(&pid); err != nil {
+	if err := tx.QueryRow(ctx, sqlSelectPartner, partnerID).Scan(&pid); err != nil {
 		return fmt.Errorf("select partner: %w", err)
 	}
 
 	sqlStorePartnerRelation := `
 	INSERT INTO
-		%s (brigade_id,	partner_id)
+		head.brigadier_partners (brigade_id,	partner_id)
 	VALUES
 		($1, $2)
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlStorePartnerRelation, (pgx.Identifier{schema, "brigadier_partners"}.Sanitize())),
-		id, partnerID,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlStorePartnerRelation, id, partnerID); err != nil {
 		return fmt.Errorf("store partner relation: %w", err)
 	}
 
 	sqlCreatePartnerAction := `
 	INSERT INTO
-		%s (brigade_id, partner_id, event_name, event_info, event_time)
+		head.brigadier_partners_actions (brigade_id, partner_id, event_name, event_info, event_time)
 	VALUES
 		($1, $2, 'assign', '', NOW() AT TIME ZONE 'UTC')
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sqlCreatePartnerAction, (pgx.Identifier{schema, "brigadier_partners_actions"}.Sanitize())),
-		id, partnerID,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sqlCreatePartnerAction, id, partnerID); err != nil {
 		return fmt.Errorf("create partner action: %w", err)
 	}
 
 	return nil
 }
 
-func storeBrigadierSaltKey(ctx context.Context, tx pgx.Tx, schema string, id uuid.UUID) (string, error) {
+func storeBrigadierSaltKey(ctx context.Context, tx pgx.Tx, seedExtra string, id uuid.UUID) (string, error) {
 	mnemo, seed, salt, err := seedgenerator.Seed(seedgenerator.ENT64, seedExtra)
 	if err != nil {
 		return "", fmt.Errorf("gen seed6: %w", err)
@@ -106,46 +83,36 @@ func storeBrigadierSaltKey(ctx context.Context, tx pgx.Tx, schema string, id uui
 
 	sqlCreateBrigadierSalt := `
 	INSERT INTO
-		%s (brigade_id,	salt)
+		head.brigadier_salts (brigade_id,	salt)
 	VALUES
 		($1, $2)
 	`
-	if _, err = tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateBrigadierSalt, (pgx.Identifier{schema, "brigadier_salts"}.Sanitize())),
-		id, salt,
-	); err != nil {
+	if _, err = tx.Exec(ctx, sqlCreateBrigadierSalt, id, salt); err != nil {
 		return "", fmt.Errorf("create brigadier salt: %w", err)
 	}
 
 	sqlCreateBrigadierKey := `
 	INSERT INTO
-		%s (brigade_id,	key)
+		head.brigadier_keys (brigade_id,	key)
 	VALUES
 		($1, $2)
 	`
-	if _, err = tx.Exec(ctx,
-		fmt.Sprintf(sqlCreateBrigadierKey, (pgx.Identifier{schema, "brigadier_keys"}.Sanitize())),
-		id, seed,
-	); err != nil {
+	if _, err = tx.Exec(ctx, sqlCreateBrigadierKey, id, seed); err != nil {
 		return "", fmt.Errorf("create brigadier key: %w", err)
 	}
 
 	return mnemo, nil
 }
 
-func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uuid.UUID,
+func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, id uuid.UUID,
 	forcePerson *namesgenerator.Person, customName string,
 ) (string, *namesgenerator.Person, error) {
 	sqlCreateBrigadier := `
 	INSERT INTO
-		%s (brigade_id,	brigadier, person)
+		head.brigadiers (brigade_id,	brigadier, person)
 	VALUES
 		($1, $2, $3)
 	`
-	sql := fmt.Sprintf(
-		sqlCreateBrigadier,
-		pgx.Identifier{schema, "brigadiers"}.Sanitize(),
-	)
 
 	cnt := 0
 	for {
@@ -189,7 +156,7 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 
 			defer stx.Rollback(ctx)
 
-			if _, e := tx.Exec(ctx, sql, id, fullname, person); e != nil {
+			if _, e := tx.Exec(ctx, sqlCreateBrigadier, id, fullname, person); e != nil {
 				return fmt.Errorf("insert id: %w", e)
 			}
 
@@ -218,9 +185,8 @@ func defineBrigadierPerson(ctx context.Context, tx pgx.Tx, schema string, id uui
 	}
 }
 
-func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, time.Time, error) {
-	sqlInsertID := `INSERT INTO %s (brigade_id, created_at) VALUES ($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC')`
-	sql := fmt.Sprintf(sqlInsertID, pgx.Identifier{schema, "brigadiers_ids"}.Sanitize())
+func defineBrigadeID(ctx context.Context, tx pgx.Tx) (uuid.UUID, time.Time, error) {
+	sqlInsertID := `INSERT INTO head.brigadiers_ids (brigade_id, created_at) VALUES ($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC')`
 
 	now := time.Now().UTC()
 	id := uuid.New()
@@ -239,7 +205,7 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 
 			defer stx.Rollback(ctx)
 
-			if _, e := tx.Exec(ctx, sql, id, now); e != nil {
+			if _, e := tx.Exec(ctx, sqlInsertID, id, now); e != nil {
 				return fmt.Errorf("insert id: %w", e)
 			}
 
@@ -268,31 +234,28 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx, schema string) (uuid.UUID, 
 	return id, now, nil
 }
 
-func storeBrigadierLabel(ctx context.Context, tx pgx.Tx, schema string,
+func storeBrigadierLabel(ctx context.Context, tx pgx.Tx,
 	id uuid.UUID, pid uuid.UUID, now time.Time, label string, labelID string, firstVisit int64,
 ) error {
 	fv := time.Unix(firstVisit, 0)
 
 	sql := `
 	INSERT INTO
-		%s (brigade_id, created_at, label, label_id, first_visit, update_time, partner_id)
+		head.start_labels (brigade_id, created_at, label, label_id, first_visit, update_time, partner_id)
 	VALUES
 		($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', $3, $4, $5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', NOW() AT TIME ZONE 'UTC', $6)
 	ON CONFLICT (label_id, partner_id, first_visit) DO UPDATE
 		SET brigade_id=$1, created_at=$2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', label=$3, first_visit=$5::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC', update_time=NOW() AT TIME ZONE 'UTC', partner_id=$6
 	`
-	if _, err := tx.Exec(ctx,
-		fmt.Sprintf(sql, (pgx.Identifier{schema, "start_labels"}.Sanitize())),
-		id, now, label, labelID, fv, pid,
-	); err != nil {
+	if _, err := tx.Exec(ctx, sql, id, now, label, labelID, fv, pid); err != nil {
 		return fmt.Errorf("store label: %w", err)
 	}
 
 	return nil
 }
 
-func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
-	partnerID uuid.UUID, creationInfo string,
+func CreateBrigade(ctx context.Context, db *pgxpool.Pool,
+	seedExtra string, partnerID uuid.UUID, creationInfo string,
 	forcePerson *namesgenerator.Person, customName string,
 	label string, labelID string, firstVisit int64,
 ) (uuid.UUID, string, string, *namesgenerator.Person, error) {
@@ -303,30 +266,30 @@ func createBrigade(ctx context.Context, db *pgxpool.Pool, schema string,
 
 	defer tx.Rollback(ctx)
 
-	id, now, err := defineBrigadeID(ctx, tx, schema)
+	id, now, err := defineBrigadeID(ctx, tx)
 	if err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("select brigade id: %w", err)
 	}
 
-	fullname, person, err := defineBrigadierPerson(ctx, tx, schema, id, forcePerson, customName)
+	fullname, person, err := defineBrigadierPerson(ctx, tx, id, forcePerson, customName)
 	if err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("select brigadier person: %w", err)
 	}
 
-	mnemo, err := storeBrigadierSaltKey(ctx, tx, schema, id)
+	mnemo, err := storeBrigadierSaltKey(ctx, tx, seedExtra, id)
 	if err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigade salt key: %w", err)
 	}
 
-	if err := createBrigadeEvent(ctx, tx, schema, id, creationInfo); err != nil {
+	if err := createBrigadeEvent(ctx, tx, id, creationInfo); err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("create brigade event: %w", err)
 	}
 
-	if err := storeBrigadierPartner(ctx, tx, schema, id, partnerID); err != nil {
+	if err := storeBrigadierPartner(ctx, tx, id, partnerID); err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier partner: %w", err)
 	}
 
-	if err := storeBrigadierLabel(ctx, tx, schema, id, partnerID, now, label, labelID, firstVisit); err != nil {
+	if err := storeBrigadierLabel(ctx, tx, id, partnerID, now, label, labelID, firstVisit); err != nil {
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 

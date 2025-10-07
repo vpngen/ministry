@@ -13,7 +13,7 @@ go build -C ministry/cmd/recodesnaps -o ../../../bin/recodesnaps
 go build -C ministry/cmd/recodesnapmap -o ../../../bin/recodesnapmap
 go build -C ministry/cmd/synclabels -o ../../../bin/synclabels
 
-go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1 # fix go 1.24
 
 nfpm package --config "ministry/debpkg/nfpm.yaml" --target "${SHARED_BASE}/pkg" --packager deb
 

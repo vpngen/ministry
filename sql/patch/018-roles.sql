@@ -8,6 +8,7 @@ GRANT
 ON 
         :"schema_name".brigadier_vip,
         :"schema_name".brigadier_vip_actions,
+        :"schema_name".vip_telegram_ids
 TO  
         :"head_vpnapi_dbuser";
 

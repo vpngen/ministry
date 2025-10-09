@@ -300,3 +300,68 @@ func CreateBrigade(ctx context.Context, db *pgxpool.Pool,
 
 	return id, mnemo, fullname, person, nil
 }
+
+func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
+	partnerID uuid.UUID, creationInfo string,
+	forcePerson *namesgenerator.Person, customName string,
+	label string, labelID string, firstVisit int64,
+) (uuid.UUID, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	id, now, err := defineBrigadeID(ctx, tx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("select brigade id: %w", err)
+	}
+
+	if err := createBrigadeEvent(ctx, tx, id, creationInfo); err != nil {
+		return uuid.Nil, fmt.Errorf("create brigade event: %w", err)
+	}
+
+	if err := storeBrigadierPartner(ctx, tx, id, partnerID); err != nil {
+		return uuid.Nil, fmt.Errorf("store brigadier partner: %w", err)
+	}
+
+	if err := storeBrigadierLabel(ctx, tx, id, partnerID, now, label, labelID, firstVisit); err != nil {
+		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return id, fmt.Errorf("commit: %w", err)
+	}
+
+	return id, nil
+}
+
+func UpdateVIPBrigade(ctx context.Context, db *pgxpool.Pool,
+	seedExtra string, id uuid.UUID, creationInfo string,
+) (uuid.UUID, string, string, *namesgenerator.Person, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, "", "", nil, fmt.Errorf("begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	fullname, person, err := defineBrigadierPerson(ctx, tx, id, nil, "")
+	if err != nil {
+		return uuid.Nil, "", "", nil, fmt.Errorf("select brigadier person: %w", err)
+	}
+
+	mnemo, err := storeBrigadierSaltKey(ctx, tx, seedExtra, id)
+	if err != nil {
+		return uuid.Nil, "", "", nil, fmt.Errorf("store brigade salt key: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return id, "", "", nil, fmt.Errorf("commit: %w", err)
+	}
+
+	return id, mnemo, fullname, person, nil
+}

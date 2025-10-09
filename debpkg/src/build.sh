@@ -6,6 +6,7 @@ export CGO_ENABLED=0
 
 go build -C ministry/cmd/checkbrigadier -o ../../../bin/checkbrigadier
 go build -C ministry/cmd/ckvip -o ../../../bin/ckvip
+go build -C ministry/cmd/reqvipid -o ../../../bin/reqvipid
 go build -C ministry/cmd/createbrigade -o ../../../bin/createbrigade
 go build -C ministry/cmd/restorebrigadier -o ../../../bin/restorebrigadier
 go build -C ministry/cmd/syncstats -o ../../../bin/syncstats

@@ -4,16 +4,18 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/vpngen/keydesk/keydesk"
 	jwtsvc "github.com/vpngen/keydesk/pkg/jwt"
 	sshVng "github.com/vpngen/ministry/internal/ssh"
 )
 
 const (
-	sshkeyDefaultPath         = "/etc/vgdept"
+	sshkeyDefaultPath    = "/etc/vgdept"
+	keydeskJwtDefaultDir = "/etc/vgdept"
+
 	sshkeyRemoteUsername      = "_valera_"
 	keydeskJwtPrivkeyFileName = "keydesk-jwt.key"
 	etcSubdir                 = "vg-keydesk"
@@ -23,6 +25,10 @@ const (
 )
 
 type config struct {
+	debug     bool
+	onlyfetch bool
+	silent    bool
+
 	jwtKeydeskIssuer jwtsvc.KeydeskTokenIssuer
 
 	dbURL    string
@@ -68,23 +74,35 @@ func parseArgs() (config, error) {
 
 	cfg.sshKeyFn = sshKeyFilename
 
-	etcDir := flag.String("c", "", "Dir for config files (for test). Default: "+keydesk.DefaultEtcDir)
+	debug := flag.Bool("debug", false, "Debug")
+	silent := flag.Bool("s", false, "Silent")
+	onlyfetch := flag.Bool("onlyfetch", false, "Only fetch and print answers")
 
 	flag.Parse()
 
-	edir := ""
-	if *etcDir != "" {
-		dir, err := filepath.Abs(*etcDir)
-		if err != nil {
-			return cfg, fmt.Errorf("etc dir: %w", err)
-		}
+	cfg.debug = *debug
+	cfg.onlyfetch = *onlyfetch
+	cfg.silent = *silent && !*debug
 
-		edir = filepath.Join(dir, etcSubdir)
+	sysUser, err := user.Current()
+	if err != nil {
+		return cfg, fmt.Errorf("user: %w", err)
 	}
 
-	vipPrivkeyFn := filepath.Join(edir, keydeskJwtPrivkeyFileName)
+	vipPrivkeyFn := filepath.Join(keydeskJwtDefaultDir, keydeskJwtPrivkeyFileName)
 	if _, err := os.Stat(vipPrivkeyFn); err != nil {
-		return cfg, fmt.Errorf("stat jwt privkey %s: %w", vipPrivkeyFn, err)
+		vipPrivkeyFn = filepath.Join(sysUser.HomeDir, keydeskJwtPrivkeyFileName)
+		if _, err := os.Stat(vipPrivkeyFn); err != nil {
+			p, err := os.Executable()
+			if err != nil {
+				return cfg, fmt.Errorf("get executable path: %w", err)
+			}
+
+			vipPrivkeyFn = filepath.Join(filepath.Dir(p), etcSubdir, keydeskJwtPrivkeyFileName)
+			if _, err := os.Stat(vipPrivkeyFn); err != nil {
+				return cfg, fmt.Errorf("stat jwt privkey %s: %w", vipPrivkeyFn, err)
+			}
+		}
 	}
 
 	signingMethod, jwtKeydeskPrivkey, _, keyId, err := jwtsvc.ReadPrivateSSHKey(vipPrivkeyFn)

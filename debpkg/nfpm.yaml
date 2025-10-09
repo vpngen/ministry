@@ -56,6 +56,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/reqvipid
+  dst: /opt/vg-head-vpnapi/reqvipid
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: bin/createbrigade
   dst: /opt/vg-head-vpnapi/createbrigade
   file_info:
@@ -216,6 +222,18 @@ contents:
     group: root
 - src: ministry/systemd/vg-sync-ids.service
   dst: /etc/systemd/system/vg-sync-ids.service
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckvip.timer
+  dst: /etc/systemd/system/vg-ckvip.timer
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckvip.service
+  dst: /etc/systemd/system/vg-ckvip.service
   file_info:
     mode: 0644
     owner: root

@@ -62,6 +62,57 @@ elif [ "$l" -ne 36 ]; then
         exit 1
 fi
 
+is_deletebale() {
+        brigade_id="${1}"
+
+        result=$(psql -d "${DBNAME}" -q -t -A \
+                --set ON_ERROR_STOP=yes \
+                --set brigade_id="${brigade_id}" <<EOF
+        SELECT 
+                bv.brigade_id
+        FROM 
+                head.brigadier_vip bv
+        WHERE 
+                bv.brigade_id = :'brigade_id'
+        ;
+EOF
+        )
+
+        rc=$?
+        if [ $rc -ne 0 ]; then
+                echo "[-][is deleteable] Something wrong with db: $rc"
+                return 1
+        fi
+
+        if [ -n "${result}" ]; then
+                echo "[-]         Brigade ${brigade_id} is VIP"
+                return 1
+        fi
+
+        result=$(psql -d "${DBNAME}" -q -t -A \
+                --set ON_ERROR_STOP=yes \
+                --set brigade_id="${brigade_id}" <<EOF
+        SELECT 
+                brigade_id
+        FROM 
+                head.deleted_brigadiers
+        WHERE 
+                brigade_id = :'brigade_id'
+        ;
+EOF
+        )
+
+        rc=$?
+        if [ $rc -ne 0 ]; then
+                echo "[-][is deleteable] Something wrong with db: $rc"
+                return 1
+        fi
+
+        if [ -n "${result}" ]; then
+                echo "[-]         Brigade ${brigade_id} is already deleted"
+                return 1
+        fi
+}
 
 getrealm() {
         brigade_id="${1}"
@@ -70,7 +121,6 @@ getrealm() {
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${brigade_id}" \
                 --set schema_name="${SCHEMA}" <<EOF
-BEGIN;
         SELECT
                 COUNT(*) AS total_count,
 	        COUNT(CASE WHEN br.draft = TRUE THEN 1 END) AS draft_count,
@@ -95,7 +145,6 @@ BEGIN;
                 br.brigade_id = :'brigade_id'
                 AND bv.brigade_id IS NULL
         ;
-COMMIT;
 EOF
 )
         rc=$?
@@ -113,7 +162,10 @@ EOF
 }
 
 if [ -z "${ACTION}" ]; then
-        
+        if ! is_deletebale "${bid}"; then
+                exit 1
+        fi
+
         getrealm "${bid}"
 
         if [ "${total_count}" -gt 1 ]; then
@@ -126,19 +178,19 @@ if [ -z "${ACTION}" ]; then
                 exit 1
         fi
 
-        if [ -z "${realm_id}" ]; then
-                realm_id="00000000-0000-0000-0000-000000000000"
-        fi
+        #if [ -z "${realm_id}" ]; then
+        #        realm_id="00000000-0000-0000-0000-000000000000"
+        #fi
 
-        spinlock_filename="${realm_id}.lock"
-        if [ -d "${HOME}" ] && [ -w "${HOME}" ]; then
-                spinlock="${HOME}/${spinlock_filename}"
-        elif [ -d "/tmp" ] && [ -w "/tmp" ]; then
-                spinlock="/tmp/${spinlock_filename}"
-        else
-                echo "[-] Can't create spinlock file"
-                exit 1
-        fi
+        #spinlock_filename="${realm_id}.lock"
+        #if [ -d "${HOME}" ] && [ -w "${HOME}" ]; then
+        #        spinlock="${HOME}/${spinlock_filename}"
+        #elif [ -d "/tmp" ] && [ -w "/tmp" ]; then
+        #        spinlock="/tmp/${spinlock_filename}"
+        #else
+        #        echo "[-] Can't create spinlock file"
+        #        exit 1
+        #fi
 
         #flock -x -w "${LOCK_TIMEOUT}" "${spinlock}" "${0}" "${bid}" "${REASON}" "go"
         "${0}" "${bid}" "${REASON}" "go"
@@ -153,6 +205,10 @@ fi
 
 if [ -n "${ACTION}" ] && [ "${ACTION}" != "go" ]; then
         echo "[-] Action is invalid"
+        exit 1
+fi
+
+if ! is_deletebale "${bid}"; then
         exit 1
 fi
 

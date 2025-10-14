@@ -358,10 +358,32 @@ func UpdateVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 		return uuid.Nil, "", "", nil, fmt.Errorf("store brigade salt key: %w", err)
 	}
 
+	if err := storeVIPMnemo(ctx, tx, id, mnemo); err != nil {
+		return uuid.Nil, "", "", nil, fmt.Errorf("store vip memo: %w", err)
+	}
+
 	err = tx.Commit(ctx)
 	if err != nil {
 		return id, "", "", nil, fmt.Errorf("commit: %w", err)
 	}
 
 	return id, mnemo, fullname, person, nil
+}
+
+const sqlVIPStoreMnemo = `
+INSERT INTO
+	head.vip_messages
+	(brigade_id, mnemo)
+VALUES
+	($1, $2)
+ON CONFLICT (brigade_id) DO UPDATE
+	SET mnemo = EXCLUDED.mnemo
+`
+
+func storeVIPMnemo(ctx context.Context, tx pgx.Tx, id uuid.UUID, mnemo string) error {
+	if _, err := tx.Exec(ctx, sqlVIPStoreMnemo, id, mnemo); err != nil {
+		return fmt.Errorf("store vip mnemo: %w", err)
+	}
+
+	return nil
 }

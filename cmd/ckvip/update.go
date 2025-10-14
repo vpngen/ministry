@@ -64,9 +64,9 @@ func updateVIPRecords(ctx context.Context, db *pgxpool.Pool, brigades map[uuid.U
 
 	defer tx.Rollback(ctx)
 
-	for obfsUUID, brigade := range brigades {
+	for _, brigade := range brigades {
 		if !silent {
-			fmt.Fprintf(os.Stderr, "Brigade: %s (%s), ExpiredAt: %s, UsersCount: %d\n", brigade.BrigadeID, obfsUUID, brigade.ExpiredAt, brigade.UsersCount)
+			fmt.Fprintf(os.Stderr, "Brigade: %s (%s), ExpiredAt: %s, UsersCount: %d\n", brigade.BrigadeID, brigade.RawBrigadeID, brigade.ExpiredAt, brigade.UsersCount)
 		}
 
 		// set or update existing VIP record

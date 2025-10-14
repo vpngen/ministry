@@ -23,8 +23,11 @@ JOIN
 	head.brigadier_vip bv ON b.brigade_id = bv.brigade_id
 LEFT JOIN
 	head.deleted_brigadiers d ON b.brigade_id = d.brigade_id
+LEFT JOIN
+	head.vip_messages vm ON b.brigade_id = vm.brigade_id AND vm.finalizer = false
 WHERE 
 	d.brigade_id IS NULL
+	AND vm.brigade_id IS NULL
 	AND bv.vip_expire > (NOW() AT TIME ZONE 'UTC')
 	AND bv.finalizer = false
 `
@@ -69,8 +72,11 @@ JOIN
 	head.brigadier_vip bv ON b.brigade_id = bv.brigade_id
 LEFT JOIN
 	head.deleted_brigadiers d ON b.brigade_id = d.brigade_id
+LEFT JOIN
+	head.vip_messages vm ON b.brigade_id = vm.brigade_id AND vm.finalizer = false
 WHERE 
 	d.brigade_id IS NOT NULL
+	AND vm.brigade_id IS NULL
 	AND bv.vip_expire > (NOW() AT TIME ZONE 'UTC')
 	AND bv.finalizer = false
 `

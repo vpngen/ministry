@@ -103,6 +103,23 @@ func main() {
 		log.Fatalf("%s: Can't restore deleted VIP brigades: %s\n", LogTag, err)
 	}
 
+	// try to create credentials for VIP brigades
+	if !cfg.silent {
+		fmt.Fprintf(os.Stderr, "%s: Try to create credentials for VIP brigades\n", LogTag)
+	}
+
+	if err := newCreds(ctx, db, sshconf, cfg.silent); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: Can't create credentials for VIP brigades: %s\n", LogTag, err)
+	}
+
+	if !cfg.silent {
+		fmt.Fprintf(os.Stderr, "%s: Try to set VIP brigades\n", LogTag)
+	}
+
+	if err := nextTryNewBrigade(ctx, db, sshconf, cfg.silent); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: Can't set VIP brigades: %s\n", LogTag, err)
+	}
+
 	// try to unset vip brigade
 	if !cfg.silent {
 		fmt.Fprintf(os.Stderr, "%s: Try to unset VIP brigades\n", LogTag)

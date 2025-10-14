@@ -6,6 +6,8 @@ remove() {
         printf "Stop the service unit\n"
         systemctl stop --force vg-sync-ids.timer ||:
         systemctl stop --force vg-sync-ids.service ||:
+        systemctl stop --force vg-ckvip.timer ||:
+        systemctl stop --force vg-ckvip.service ||:
 }
 
 upgrade() {

@@ -36,7 +36,7 @@ func ReplaceBrigadier(ctx context.Context, db *pgxpool.Pool, tag string,
 
 	defer tx.Rollback(ctx)
 
-	realmID, addr, active, err := fetchBrigadeRealm(ctx, tx, brigadeID)
+	realmID, addr, active, err := FetchBrigadeRealm(ctx, tx, brigadeID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch realm: %w", err)
 	}
@@ -53,7 +53,7 @@ func ReplaceBrigadier(ctx context.Context, db *pgxpool.Pool, tag string,
 	return vpnconf, nil
 }
 
-func fetchBrigadeRealm(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID,
+func FetchBrigadeRealm(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID,
 ) (uuid.UUID, netip.AddrPort, bool, error) {
 	sqlSelectRealm := `
 	SELECT

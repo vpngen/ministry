@@ -5,7 +5,7 @@ SCHEMA=${SCHEMA:-"head"}
 
 DELETEDLIST=${DELETEDLIST:-"${HOME}/deleted_brigadiers.list"}
 
-INTERVAL=${INTERVAL:-"1 mons"}
+INTERVAL=${INTERVAL:-"2 mons"}
 
 while true; do
         info=$(psql -d "${DBNAME}" -t -A -q \

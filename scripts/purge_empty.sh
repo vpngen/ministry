@@ -42,8 +42,10 @@ BEGIN;
                 :"schema_name".brigadiers AS b 
                 LEFT JOIN  :"schema_name".brigadier_realms AS r ON b.brigade_id=r.brigade_id 
                 LEFT JOIN  :"schema_name".deleted_brigadiers AS d ON b.brigade_id = d.brigade_id 
+                LEFT JOIN  :"schema_name".brigadier_vip AS bv ON b.brigade_id = bv.brigade_id
         WHERE 
                 d.brigade_id IS NULL 
+                AND bv.brigade_id IS NULL
                 AND r.brigade_id IS NULL
                 AND (
                         SELECT 

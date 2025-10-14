@@ -12,6 +12,12 @@ if [ $# -eq 0 ]; then
     printdef
 fi
 
+EnvironmentFile=/etc/vgdept/ckvip.env
+if [ -s "${EnvironmentFile}" ]; then
+    # shellcheck disable=SC1090
+    . "${EnvironmentFile}"
+fi
+
 cmd=${1}; shift
 basedir=$(dirname "$0")
 
@@ -21,6 +27,8 @@ elif [ "restorebrigadier" = "${cmd}" ]; then
     "${basedir}"/restorebrigadier "$@"
 elif [ "synclabels" = "${cmd}" ]; then
     "${basedir}"/synclabels "$@"
+elif [ "readmsgs" = "${cmd}" ]; then
+    OBFS_UUID="${OBFS_UUID}" "${basedir}"/readmsgs "$@"
 else
     echo "Unknown command: ${cmd}"
     printdef

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ppath="$0"
-exec_dir="$(dirname "${ppath}")"
+#exec_dir="$(dirname "${ppath}")"
 app_name="$(basename "${ppath}")"
 
 DBNAME=${DBNAME:-"vgdept"}
@@ -25,8 +25,9 @@ if [ -z "${SSH_KEY}" ]; then
         fi
 fi
 
-DAYS=${DAYS:-"1"}
+DAYS=${DAYS:-"7"}
 NUMS=${NUMS:-"100000"}
+MINACTIVE=${MINACTIVE:-"10"}
 
 VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
 if [ -s "${VIP_BRIGADES_FILE_HOME}" ]; then
@@ -54,7 +55,7 @@ purge_per_igrp () {
                 exit 1
         fi
 
-        ICMD="getwasted inactive -m ${DAYS} -n ${NUMS} -igrp"
+        ICMD="getwasted inactive -x ${MINACTIVE} -d ${DAYS} -n ${NUMS} -igrp"
         echo "GET REALM: ${REALM} IGRP: ${igroup} WASTED: ${ICMD}"
 
         wasted=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${ICMD}" | grep ";${igroup}" | cut -d ';' -f 1)
@@ -73,6 +74,29 @@ purge_per_igrp () {
                 fi
 
                 echo "delete ${bid}"
+
+                vip=$(psql -d "${DBNAME}" -q -t -A \
+                --set ON_ERROR_STOP=yes \
+                --set brigade_id="${bid}" \
+                --set schema_name="${SCHEMA}" <<EOF
+                SELECT 
+                        COUNT(*)
+                FROM 
+                        :"schema_name".brigadier_vip
+                WHERE 
+                        brigade_id = :'brigade_id'
+EOF
+)
+                rc=$?
+                if [ $rc -ne 0 ]; then
+                        echo "[-]         Something wrong with db: $rc"
+                        continue
+                fi
+
+                if [ -n "${vip}" ] && [ "${vip}" -ne 0 ]; then
+                        echo "[-]         Brigade is not ready for deletion. Is VIP."
+                        continue
+                fi
 
                 count=$(psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
@@ -95,7 +119,7 @@ EOF
                 fi
 
                 if [ -n "${count}" ] && [ "${count}" -ne 0 ]; then
-                        echo "[-]         Brigade is not ready for deletion"
+                        echo "[-]         Brigade is not ready for deletion. Has ${count} active realms."
                         continue
                 fi
 
@@ -117,7 +141,7 @@ purge_per_realm () {
                 exit 1
         fi
 
-        REALM_CMD="getwasted inactive -m ${DAYS} -n ${NUMS} -igrp"
+        REALM_CMD="getwasted inactive -x ${MINACTIVE} -d ${DAYS} -n ${NUMS} -igrp"
         echo "GET REALM: ${REALM} WASTED: ${REALM_CMD}"
 
         igroups=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${REALM}" "${REALM_CMD}" | cut -d ';' -f 2 | sort | uniq)

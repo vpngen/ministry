@@ -42,7 +42,7 @@ var (
 
 func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 	sshconf *ssh.ClientConfig, tag string,
-	partnerID uuid.UUID, brigadeID uuid.UUID,
+	vip bool, brigadeID uuid.UUID,
 	fullname string, person *namesgenerator.Person,
 ) (*dcmgmt.Answer, error) {
 	attempts := 0
@@ -52,12 +52,12 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 			return nil, ErrAttemptLimitExceeded
 		}
 
-		realmID, addr, err := defineBrigadeRealm(ctx, db, partnerID, brigadeID)
+		realmID, addr, err := DefineBrigadeRealm(ctx, db, brigadeID)
 		if err != nil {
 			return nil, fmt.Errorf("define realm: %w", err)
 		}
 
-		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, brigadeID, fullname, person)
+		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, vip, brigadeID, fullname, person)
 		if err != nil {
 			if errors.Is(err, ErrAttemptLimitExceeded) {
 				continue
@@ -79,7 +79,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 }
 
 func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag string,
-	realmID uuid.UUID, addr netip.AddrPort,
+	realmID uuid.UUID, addr netip.AddrPort, vip bool,
 	brigadeUUID uuid.UUID, fullname string, person *namesgenerator.Person,
 ) (*dcmgmt.Answer, error) {
 	fullnameEncoded := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname))
@@ -96,6 +96,10 @@ func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag str
 		descEncoded,
 		urlEncoded,
 	)
+
+	if vip {
+		cmd += " -vip"
+	}
 
 	fmt.Fprintf(os.Stderr, "%s: %s#%s -> %s\n", tag, sshconf.User, addr, cmd)
 
@@ -169,8 +173,7 @@ func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag str
 	return wgconf, nil
 }
 
-func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool,
-	partnerID uuid.UUID, brigadeID uuid.UUID,
+func DefineBrigadeRealm(ctx context.Context, db *pgxpool.Pool, brigadeID uuid.UUID,
 ) (uuid.UUID, netip.AddrPort, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -188,7 +191,7 @@ func defineBrigadeRealm(ctx context.Context, db *pgxpool.Pool,
 		return uuid.Nil, netip.AddrPort{}, ErrBrigadeAlreadyLocated
 	}
 
-	realmID, addr, err := selectBrigadeRealm(ctx, tx, partnerID, brigadeID)
+	realmID, addr, err := selectBrigadeRealm(ctx, tx, brigadeID)
 	if err != nil {
 		return uuid.Nil, netip.AddrPort{}, fmt.Errorf("get realm: %w", err)
 	}
@@ -343,8 +346,9 @@ func isBrigadeLocated(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (bool
 }
 
 func selectBrigadeRealm(ctx context.Context, tx pgx.Tx,
-	partnerID uuid.UUID, brigadeID uuid.UUID,
+	brigadeID uuid.UUID,
 ) (uuid.UUID, netip.AddrPort, error) {
+	// we assume that brigadier_partners has exactly one partner_id per brigade_id
 	sqlSelectRealm := `
 	SELECT
 		r.realm_id, r.control_ip
@@ -356,7 +360,6 @@ func selectBrigadeRealm(ctx context.Context, tx pgx.Tx,
 		LEFT JOIN head.brigadier_realms AS br ON br.realm_id=pr.realm_id AND br.brigade_id=b.brigade_id	-- brigadier_realms
 	WHERE
 		b.brigade_id=$1
-		AND pr.partner_id=$2
 		AND r.is_active=true
 		AND r.open_for_regs=true
 		AND r.free_slots>0
@@ -368,7 +371,7 @@ func selectBrigadeRealm(ctx context.Context, tx pgx.Tx,
 		id uuid.UUID
 		ip netip.Addr
 	)
-	if err := tx.QueryRow(ctx, sqlSelectRealm, brigadeID, partnerID).Scan(&id, &ip); err != nil {
+	if err := tx.QueryRow(ctx, sqlSelectRealm, brigadeID).Scan(&id, &ip); err != nil {
 		return uuid.Nil, netip.AddrPort{}, fmt.Errorf("select: %w", err)
 	}
 

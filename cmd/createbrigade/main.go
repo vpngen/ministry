@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/vpngen/ministry/internal/core"
 	"github.com/vpngen/ministry/internal/pgsql"
 	sshVng "github.com/vpngen/ministry/internal/ssh"
+	"github.com/vpngen/wordsgens/namesgenerator"
 )
 
 const (
@@ -34,14 +36,21 @@ const (
 	defaultBrigadesSchema = "head"
 )
 
+const brigadeCreationType = "ssh_api"
+
 const (
 	maxStartLabelLen = 64
+)
+
+var (
+	ErrEmptyAccessToken = errors.New("token not specified")
+	ErrLabelTooLong     = errors.New("label too long")
 )
 
 func main() {
 	var w io.WriteCloser
 
-	chunked, jout, token, label, labelID, fv, err := parseArgs()
+	person, fullname, chunked, jout, token, label, labelID, fv, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -80,12 +89,12 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	brigadeID, mnemo, fullname, person, err := createBrigade(ctx, db, schema, partnerID, brigadeCreationType, label, labelID, fv)
+	brigadeID, mnemo, fullname, person, err := core.CreateBrigade(ctx, db, seedExtra, partnerID, brigadeCreationType, person, fullname, label, labelID, fv)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, fullname, person)
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
 	if err != nil {
 		fatal(w, jout, "%s: Can't request brigade: %s\n", LogTag, err)
 	}
@@ -184,17 +193,19 @@ func readConfigs() (string, string, string, error) {
 	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
-func parseArgs() (bool, bool, []byte, string, string, int64, error) {
+func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, string, int64, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 	jout := flag.Bool("j", false, "json output")
 	label := flag.String("l", "", "label")
 	labelID := flag.String("lu", "", "label UUID")
 	labelTime := flag.Int("lt", 0, "first visit")
+	customName := flag.String("name", "", "custom brigadier fullname")
+	forcePerson := flag.String("p", "", "force person")
 
 	flag.Parse()
 
 	if *label != "" && len(*label) > maxStartLabelLen {
-		return false, false, nil, "", "", 0, fmt.Errorf("label: %w", ErrLabelTooLong)
+		return nil, "", false, false, nil, "", "", 0, fmt.Errorf("label: %w", ErrLabelTooLong)
 	}
 
 	id := *labelID
@@ -209,14 +220,36 @@ func parseArgs() (bool, bool, []byte, string, string, int64, error) {
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return false, false, nil, "", "", 0, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
+		return nil, "", false, false, nil, "", "", 0, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return false, false, nil, "", "", 0, fmt.Errorf("access token: %w", err)
+		return nil, "", false, false, nil, "", "", 0, fmt.Errorf("access token: %w", err)
 	}
 
-	return *chunked, *jout, token, *label, id, int64(firstVisit), nil
+	var person *namesgenerator.Person
+	if *forcePerson != "" {
+		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*forcePerson)
+		if err != nil {
+			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("force person: %w", err)
+		}
+
+		if err := json.Unmarshal(buf, &person); err != nil {
+			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("force person: %w", err)
+		}
+	}
+
+	var fullname string
+	if *customName != "" {
+		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*customName)
+		if err != nil {
+			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("custom name: %w", err)
+		}
+
+		fullname = string(buf)
+	}
+
+	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), nil
 }

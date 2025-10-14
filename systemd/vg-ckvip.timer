@@ -1,0 +1,10 @@
+[Unit]
+Description=Sync vip brigades
+Requires=vg-ckvip.service
+
+[Timer]
+Unit=vg-ckvip.service
+OnCalendar=*-*-* *:*:00
+
+[Install]
+WantedBy=timers.target

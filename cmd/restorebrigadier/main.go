@@ -40,7 +40,7 @@ var errInvalidArgs = errors.New("invalid args")
 func main() {
 	var w io.WriteCloser
 
-	name, mnemo, dryRun, chunked, jout, err := parseArgs()
+	name, mnemo, dryRun, chunked, jout, force, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -70,8 +70,8 @@ func main() {
 
 	ctx := context.Background()
 
-	brigadeID, partnerID, person, del, delTime, delReason, lastRestore, err := core.CheckBrigadier(
-		ctx, db, seedExtra, name, mnemo,
+	brigadeID, person, del, delTime, delReason, count, olderRestore, _, err := core.CheckBrigadier(
+		ctx, db, seedExtra, name, mnemo, force,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -92,11 +92,14 @@ func main() {
 			return
 		}
 
-		if !lastRestore.IsZero() && lastRestore.After(time.Now().UTC().AddDate(0, -1, 0)) {
-			tooEarly(w, jout, "Last Restore: %s\n", lastRestore.UTC().Format(time.RFC3339))
+		// > 3
+		if !force && count > 1 {
+			tooEarly(w, jout, "Last Restore: %s\n", olderRestore.UTC().Format(time.RFC3339))
+
+			return
 		}
 
-		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, name, person)
+		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, name, person)
 		if err != nil {
 			fatal(w, jout, "%s: Can't bless brigade: %s\n", LogTag, err)
 		}
@@ -179,15 +182,16 @@ func readConfigs() (string, string, error) {
 	return sshKeyFilename, dbURL, nil
 }
 
-func parseArgs() (string, string, bool, bool, bool, error) {
+func parseArgs() (string, string, bool, bool, bool, bool, error) {
 	dryRun := flag.Bool("n", false, "Dry run")
 	chunked := flag.Bool("ch", false, "chunked output")
 	jsonOut := flag.Bool("j", false, "json output")
+	force := flag.Bool("f", false, "force restore")
 
 	flag.Parse()
 
-	if flag.NArg() != 2 {
-		return "", "", false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
+	if (*force && flag.NArg() != 1) || (!*force && flag.NArg() != 2) {
+		return "", "", false, false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
 	}
 
 	// implicit base64 decoding
@@ -202,7 +206,7 @@ func parseArgs() (string, string, bool, bool, bool, error) {
 		words = string(buf)
 	}
 
-	return sanitizeNames(name), sanitizeNames(words), *dryRun, *chunked, *jsonOut, nil
+	return sanitizeNames(name), sanitizeNames(words), *dryRun, *chunked, *jsonOut, *force, nil
 }
 
 func sanitizeNames(name string) string {

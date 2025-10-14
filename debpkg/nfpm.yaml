@@ -56,6 +56,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/readmsgs
+  dst: /opt/vg-head-vpnapi/readmsgs
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: bin/reqvipid
   dst: /opt/vg-head-vpnapi/reqvipid
   file_info:

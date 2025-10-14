@@ -174,6 +174,7 @@ UPDATE
 	head.vip_messages
 SET 
 	finalizer = true,
+	last_try = NOW() AT TIME ZONE 'UTC' - INTERVAL '1 HOUR',
 	vpnconfig = $1
 WHERE 
 	brigade_id = $2

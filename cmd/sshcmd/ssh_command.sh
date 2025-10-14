@@ -21,6 +21,8 @@ elif [ "restorebrigadier" = "${cmd}" ]; then
     "${basedir}"/restorebrigadier "$@"
 elif [ "synclabels" = "${cmd}" ]; then
     "${basedir}"/synclabels "$@"
+elif [ "readmsgs" = "${cmd}" ]; then
+    "${basedir}"/readmsgs "$@"
 else
     echo "Unknown command: ${cmd}"
     printdef

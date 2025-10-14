@@ -301,10 +301,28 @@ func CreateBrigade(ctx context.Context, db *pgxpool.Pool,
 	return id, mnemo, fullname, person, nil
 }
 
+const sqlStoreTGID = `
+	INSERT INTO
+		head.vip_telegram_ids (brigade_id, telegram_id)
+	VALUES
+		($1, $2)
+	ON CONFLICT (brigade_id) DO UPDATE
+		SET telegram_id = EXCLUDED.telegram_id
+	`
+
+func storeVIPTelegramID(ctx context.Context, tx pgx.Tx, id uuid.UUID, tgID int64) error {
+	if _, err := tx.Exec(ctx, sqlStoreTGID, id, tgID); err != nil {
+		return fmt.Errorf("store vip telegram id: %w", err)
+	}
+
+	return nil
+}
+
 func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	partnerID uuid.UUID, creationInfo string,
 	forcePerson *namesgenerator.Person, customName string,
 	label string, labelID string, firstVisit int64,
+	tgID int64,
 ) (uuid.UUID, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -328,6 +346,10 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 
 	if err := storeBrigadierLabel(ctx, tx, id, partnerID, now, label, labelID, firstVisit); err != nil {
 		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
+	}
+
+	if err := storeVIPTelegramID(ctx, tx, id, tgID); err != nil {
+		return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
 	}
 
 	err = tx.Commit(ctx)

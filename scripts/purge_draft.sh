@@ -29,7 +29,7 @@ if [ "$#" -eq 3 ]; then
 
         echo "[+] Try to delete: Brigade: ${brigade_id} control_ip: ${control_ip}"
 
-        del="delbrigade -uuid ${brigade_id}"
+        del="delbrigade -f -uuid ${brigade_id}"
         echo "${del}"
 
         out=$(ssh -o IdentitiesOnly=yes -o IdentityFile="${SSH_KEY}" -o StrictHostKeyChecking=no "${USERNAME}"@"${control_ip}" "${del}" 2>&1)

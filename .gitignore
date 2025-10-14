@@ -4,3 +4,4 @@
 conf/*
 !/conf/keep-me
 vendor
+*.key

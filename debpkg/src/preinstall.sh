@@ -55,6 +55,8 @@ upgrade() {
 
         systemctl stop vg-sync-ids.timer ||:
         systemctl stop vg-sync-ids.service ||:
+        systemctl stop vg-ckvip.timer ||:
+        systemctl stop vg-ckvip.service ||:
 }
 
 # Step 2, check if this is a clean install or an upgrade

@@ -54,7 +54,7 @@ func main() {
 
 	ctx := context.Background()
 
-	brigadeID, partnerID, person, del, delTime, delReason, _, err := core.CheckBrigadier(ctx, db, seedExtra, name, mnemo)
+	brigadeID, person, del, delTime, delReason, _, _, _, err := core.CheckBrigadier(ctx, db, seedExtra, name, mnemo, false)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			log.Fatalf("Invalid mnemonics for brigadier %q\n", name)
@@ -78,7 +78,7 @@ func main() {
 		return
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, partnerID, brigadeID, name, person)
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, name, person)
 	if err != nil {
 		log.Fatalf("Can't bless brigade: %s", err)
 	}

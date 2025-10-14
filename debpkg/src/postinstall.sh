@@ -75,6 +75,8 @@ cleanInstall() {
     	systemctl daemon-reload ||:
         systemctl enable vg-sync-ids.timer ||:
 	systemctl start vg-sync-ids.timer ||:
+        systemctl enable vg-ckvip.timer ||:
+        systemctl start vg-ckvip.timer ||:
 }
 
 upgrade() {
@@ -86,6 +88,8 @@ upgrade() {
     	systemctl daemon-reload ||:
         systemctl enable vg-sync-ids.timer ||:
 	systemctl start vg-sync-ids.timer ||:
+        systemctl enable vg-ckvip.timer ||:
+        systemctl start vg-ckvip.timer ||:
 }
 
 # Step 2, check if this is a clean install or an upgrade

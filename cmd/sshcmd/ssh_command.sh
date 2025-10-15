@@ -29,6 +29,8 @@ elif [ "synclabels" = "${cmd}" ]; then
     "${basedir}"/synclabels "$@"
 elif [ "readmsgs" = "${cmd}" ]; then
     OBFS_UUID="${OBFS_UUID}" "${basedir}"/readmsgs "$@"
+elif [ "reqvipid" = "${cmd}" ]; then
+    OBFS_UUID="${OBFS_UUID}" "${basedir}"/reqvipid "$@"
 else
     echo "Unknown command: ${cmd}"
     printdef

@@ -209,11 +209,9 @@ func doneMessage(ctx context.Context, db *pgxpool.Pool, inPartnerID, inUUID, obf
 		return fmt.Errorf("exec: %w", err)
 	}
 
-	/*
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit: %w", err)
-		}
-	*/
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
 
 	return nil
 }

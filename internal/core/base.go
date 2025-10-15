@@ -324,13 +324,13 @@ SELECT
 FROM 
 	head.vip_telegram_ids
 WHERE 
-	brigade_id = $1
+	telegram_id = $1
 LIMIT 1
 `
 
-func fetchVIPByTelegramID(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (uuid.UUID, error) {
+func fetchVIPByTelegramID(ctx context.Context, tx pgx.Tx, telegram_id int64) (uuid.UUID, error) {
 	var id uuid.UUID
-	if err := tx.QueryRow(ctx, sqlFetchTGID, brigadeID).Scan(&id); err != nil {
+	if err := tx.QueryRow(ctx, sqlFetchTGID, telegram_id).Scan(&id); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, nil
 		}
@@ -355,7 +355,7 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	defer tx.Rollback(ctx)
 
 	// check if tgID already has reserved brigade
-	brigadeID, err := fetchVIPByTelegramID(ctx, tx, uuid.Nil)
+	brigadeID, err := fetchVIPByTelegramID(ctx, tx, tgID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("fetch vip by telegram id: %w", err)
 	}

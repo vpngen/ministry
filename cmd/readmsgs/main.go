@@ -173,6 +173,13 @@ WHERE
 	brigade_id = $1
 `
 
+const sqlDeleteTelegramID = `
+DELETE FROM 
+	head.vip_telegram_ids
+WHERE
+	brigade_id = $1
+`
+
 const sqlGetBrigadePartnerID = `
 SELECT 
 	bp.partner_id	
@@ -207,6 +214,10 @@ func doneMessage(ctx context.Context, db *pgxpool.Pool, inPartnerID, inUUID, obf
 
 	if _, err := tx.Exec(ctx, sqlDoneMessage, brigadeID); err != nil {
 		return fmt.Errorf("exec: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, sqlDeleteTelegramID, brigadeID); err != nil {
+		return fmt.Errorf("exec delete tg id: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

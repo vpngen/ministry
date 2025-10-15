@@ -318,6 +318,29 @@ func storeVIPTelegramID(ctx context.Context, tx pgx.Tx, id uuid.UUID, tgID int64
 	return nil
 }
 
+const sqlFetchTGID = `
+SELECT 
+	brigade_id
+FROM 
+	head.vip_telegram_ids
+WHERE 
+	brigade_id = $1
+LIMIT 1
+`
+
+func fetchVIPByTelegramID(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	if err := tx.QueryRow(ctx, sqlFetchTGID, brigadeID).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, nil
+		}
+
+		return uuid.Nil, fmt.Errorf("fetch vip telegram id: %w", err)
+	}
+
+	return id, nil
+}
+
 func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	partnerID uuid.UUID, creationInfo string,
 	forcePerson *namesgenerator.Person, customName string,
@@ -330,6 +353,16 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	}
 
 	defer tx.Rollback(ctx)
+
+	// check if tgID already has reserved brigade
+	brigadeID, err := fetchVIPByTelegramID(ctx, tx, uuid.Nil)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("fetch vip by telegram id: %w", err)
+	}
+
+	if brigadeID != uuid.Nil {
+		return brigadeID, nil
+	}
 
 	id, now, err := defineBrigadeID(ctx, tx)
 	if err != nil {

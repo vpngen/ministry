@@ -10,9 +10,20 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const getBrigade = `
+SELECT 
+	brigade_id
+FROM 
+	head.brigadiers_ids
+WHERE
+	brigade_id = $1
+`
 
 const addVIP = `
 INSERT INTO 
@@ -30,7 +41,7 @@ const purgeExpired = `
 DELETE FROM 
 	head.brigadier_vip 
 WHERE 
-	vip_expire < (NOW() AT TIME ZONE 'UTC' - $1 * INTERVAL '1 HOUR')
+	vip_expire < (NOW() AT TIME ZONE 'UTC' - $1 * INTERVAL '7 DAY')
 	AND finalizer = false
 `
 
@@ -69,14 +80,38 @@ func updateVIPRecords(ctx context.Context, db *pgxpool.Pool, brigades map[uuid.U
 			fmt.Fprintf(os.Stderr, "Brigade: %s (%s), ExpiredAt: %s, UsersCount: %d\n", brigade.BrigadeID, brigade.RawBrigadeID, brigade.ExpiredAt, brigade.UsersCount)
 		}
 
-		// set or update existing VIP record
-		comm, err := tx.Exec(ctx, addVIP, brigade.BrigadeID, brigade.ExpiredAt, brigade.UsersCount)
-		if err != nil {
-			return fmt.Errorf("set vip: %w", err)
-		}
+		if err := func() error {
+			sp, err := tx.Begin(ctx)
+			if err != nil {
+				return fmt.Errorf("begin savepoint: %w", err)
+			}
 
-		if comm.RowsAffected() == 0 {
-			fmt.Fprintf(os.Stderr, "%s: Warning: No rows affected for VIP brigade: %s\n", LogTag, brigade.BrigadeID)
+			defer sp.Rollback(ctx)
+
+			// set or update existing VIP record
+			comm, err := sp.Exec(ctx, addVIP, brigade.BrigadeID, brigade.ExpiredAt, brigade.UsersCount)
+			if err != nil {
+				var pgErr *pgconn.PgError
+
+				if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation &&
+					pgErr.ConstraintName == "brigadier_vip_brigade_id_fkey" {
+					fmt.Fprintf(os.Stderr, "%s: Warning: Brigade %s (%s) does not exist, skipping\n", LogTag, brigade.BrigadeID, brigade.RawBrigadeID)
+
+					return nil
+				}
+
+				return fmt.Errorf("set vip: %w", err)
+			}
+
+			if comm.RowsAffected() == 0 {
+				fmt.Fprintf(os.Stderr, "%s: Warning: No rows affected for VIP brigade: %s\n", LogTag, brigade.BrigadeID)
+
+				return nil
+			}
+
+			return sp.Commit(ctx)
+		}(); err != nil {
+			return err
 		}
 	}
 

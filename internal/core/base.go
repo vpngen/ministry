@@ -234,6 +234,18 @@ func defineBrigadeID(ctx context.Context, tx pgx.Tx) (uuid.UUID, time.Time, erro
 	return id, now, nil
 }
 
+func defineCustomBrigadeID(ctx context.Context, tx pgx.Tx, brigadeID uuid.UUID) (time.Time, error) {
+	sqlInsertID := `INSERT INTO head.brigadiers_ids (brigade_id, created_at) VALUES ($1, $2::TIMESTAMP WITHOUT TIME ZONE AT TIME ZONE 'UTC')`
+
+	now := time.Now().UTC()
+
+	if _, err := tx.Exec(ctx, sqlInsertID, brigadeID, now); err != nil {
+		return time.Time{}, fmt.Errorf("insert id: %w", err)
+	}
+
+	return now, nil
+}
+
 func storeBrigadierLabel(ctx context.Context, tx pgx.Tx,
 	id uuid.UUID, pid uuid.UUID, now time.Time, label string, labelID string, firstVisit int64,
 ) error {
@@ -341,6 +353,29 @@ func fetchVIPByTelegramID(ctx context.Context, tx pgx.Tx, telegram_id int64) (uu
 	return id, nil
 }
 
+const sqlFetchBID = `
+SELECT 
+	brigade_id
+FROM 
+	head.brigadiers_ids
+WHERE 
+	brigade_id = $1
+LIMIT 1
+`
+
+func fetchVIPByBrigadeID(ctx context.Context, tx pgx.Tx, brigade_id uuid.UUID) (uuid.UUID, error) {
+	var id uuid.UUID
+	if err := tx.QueryRow(ctx, sqlFetchBID, brigade_id).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, nil
+		}
+
+		return uuid.Nil, fmt.Errorf("fetch vip brigade id: %w", err)
+	}
+
+	return id, nil
+}
+
 func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	partnerID uuid.UUID, creationInfo string,
 	forcePerson *namesgenerator.Person, customName string,
@@ -391,6 +426,58 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	}
 
 	return id, nil
+}
+
+func RequestVIPBrigade2(ctx context.Context, db *pgxpool.Pool,
+	partnerID uuid.UUID, creationInfo string,
+	forcePerson *namesgenerator.Person, customName string,
+	label string, labelID string, firstVisit int64,
+	tgID int64, brigadeID uuid.UUID,
+) (uuid.UUID, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	// check if tgID already has reserved brigade
+	checkID, err := fetchVIPByBrigadeID(ctx, tx, brigadeID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("fetch vip by brigade id: %w", err)
+	}
+
+	if checkID != uuid.Nil {
+		return brigadeID, nil
+	}
+
+	now, err := defineCustomBrigadeID(ctx, tx, brigadeID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("select brigade id: %w", err)
+	}
+
+	if err := createBrigadeEvent(ctx, tx, brigadeID, creationInfo); err != nil {
+		return uuid.Nil, fmt.Errorf("create brigade event: %w", err)
+	}
+
+	if err := storeBrigadierPartner(ctx, tx, brigadeID, partnerID); err != nil {
+		return uuid.Nil, fmt.Errorf("store brigadier partner: %w", err)
+	}
+
+	if err := storeBrigadierLabel(ctx, tx, brigadeID, partnerID, now, label, labelID, firstVisit); err != nil {
+		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
+	}
+
+	if err := storeVIPTelegramID(ctx, tx, brigadeID, tgID); err != nil {
+		return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return brigadeID, fmt.Errorf("commit: %w", err)
+	}
+
+	return brigadeID, nil
 }
 
 func UpdateVIPBrigade(ctx context.Context, db *pgxpool.Pool,

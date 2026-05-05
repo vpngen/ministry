@@ -71,6 +71,8 @@ constract_version () {
 if [ "$1" = "pkg" ]; then
         set -e
 
+        export SHARED_BASE="$(cd "$(dirname "$0")"; pwd)"
+
         export USER_UID="${USER_UID}"
         export BRANCH="${BRANCH}"
         export VERMETADATA="${VERMETADATA}"

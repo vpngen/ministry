@@ -68,14 +68,16 @@ func parseArgs() (config, error) {
 
 	cfg.dbURL = dbURL
 
-	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
-	if err != nil {
-		return cfg, fmt.Errorf("lookup for ssh key: %w", err)
-	}
-
-	cfg.sshKeyFn = sshKeyFilename
-
 	cfg.mock = os.Getenv("MOCK") == "true"
+
+	if !cfg.mock {
+		sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+		if err != nil {
+			return cfg, fmt.Errorf("lookup for ssh key: %w", err)
+		}
+
+		cfg.sshKeyFn = sshKeyFilename
+	}
 
 	debug := flag.Bool("debug", false, "Debug")
 	silent := flag.Bool("s", false, "Silent")

@@ -22,19 +22,22 @@ create_users () {
         if id "${HEAD_VPNAPI_USER}" >/dev/null 2>&1; then
                 echo "user ${HEAD_VPNAPI_USER} already exists"
         else
-                useradd -p "*" -m "${HEAD_VPNAPI_USER}" -s /bin/bash
+                groupadd -f "${HEAD_VPNAPI_USER}"
+                useradd -p "*" -m "${HEAD_VPNAPI_USER}" -g "${HEAD_VPNAPI_USER}" -s /bin/bash
         fi
 
         if id "${HEAD_STATS_USER}" >/dev/null 2>&1; then
                 echo "user ${HEAD_STATS_USER} already exists"
         else
-                useradd -p "*" -m "${HEAD_STATS_USER}" -s /bin/bash
+                groupadd -f "${HEAD_STATS_USER}"
+                useradd -p "*" -m "${HEAD_STATS_USER}" -g "${HEAD_STATS_USER}" -s /bin/bash
         fi
 
         if id "${HEAD_MIGRATION_USER}" >/dev/null 2>&1; then
                 echo "user ${HEAD_MIGRATION_USER} already exists"
         else
-                useradd -p "*" -m "${HEAD_MIGRATION_USER}" -s /bin/bash
+                groupadd -f "${HEAD_MIGRATION_USER}"
+                useradd -p "*" -m "${HEAD_MIGRATION_USER}" -g "${HEAD_MIGRATION_USER}" -s /bin/bash
         fi
 }
 

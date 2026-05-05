@@ -8,8 +8,11 @@ printdef() {
     exit 1
 }
 
-if [ $# -eq 0 ]; then 
-    printdef
+if [ $# -eq 0 ]; then
+    if [ -z "${SSH_ORIGINAL_COMMAND}" ]; then
+        printdef
+    fi
+    eval set -- "${SSH_ORIGINAL_COMMAND}"
 fi
 
 EnvironmentFile=/etc/vgdept/ckvip.env

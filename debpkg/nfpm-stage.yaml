@@ -8,6 +8,10 @@ release: ${PACKAGE_RELEASE}
 
 provides:
 - vg-head-stage
+conflicts:
+- vg-head
+replaces:
+- vg-head
 depends:
 - openssh-client
 - sudo

@@ -18,14 +18,14 @@ echo "head migration user: $HEAD_MIGRATION_DBUSER"
 SQL_DIR="/usr/share/vg-head/sql"
 
 load_sql_file () {
+        rc=0
         cat "$1" | runuser -u "${DBUSER}" -- psql -d "${DBNAME}" -v ON_ERROR_STOP=yes \
                 --set schema_name="${SCHEMA}" \
                 --set head_stats_dbuser="${HEAD_STATS_DBUSER}" \
                 --set head_admin_dbuser="${HEAD_ADMIN_DBUSER}" \
                 --set head_vpnapi_dbuser="${HEAD_VPNAPI_DBUSER}" \
                 --set partners_admin_dbuser="${PARTNERS_ADMIN_DBUSER}" \
-                --set head_migration_dbuser="${HEAD_MIGRATION_DBUSER}"
-        rc=$?
+                --set head_migration_dbuser="${HEAD_MIGRATION_DBUSER}" || rc=$?
         if [ ${rc} -ne 0 ] && [ ${rc} -ne 3 ]; then
                 exit 1
         fi
@@ -57,8 +57,8 @@ apply_database_patches () {
                 load_sql_file "${patch}"
         done
 
-        runuser -u "${DBUSER}" -- psql -v ON_ERROR_STOP=yes -c "SELECT pg_reload_conf();"
-        rc=$?
+        rc=0
+        runuser -u "${DBUSER}" -- psql -v ON_ERROR_STOP=yes -c "SELECT pg_reload_conf();" || rc=$?
         if [ ${rc} -ne 0 ]; then
                 exit 1
         fi
@@ -69,8 +69,6 @@ apply_database_patches () {
 
 cleanInstall() {
 	printf "Post Install of an clean install\n"
-
-        set -e
 
         init_database
         apply_database_patches
@@ -84,7 +82,7 @@ cleanInstall() {
 }
 
 upgrade() {
-    	printf "Post Install of an upgrade\n"
+	printf "Post Install of an upgrade\n"
 
         apply_database_patches
 

@@ -11,6 +11,7 @@ import (
 	"github.com/vpngen/ministry/internal/pgsql"
 
 	sshVng "github.com/vpngen/ministry/internal/ssh"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -69,9 +70,12 @@ func main() {
 		return
 	}
 
-	sshconf, err := sshVng.CreateSSHConfig(cfg.sshKeyFn, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
-	if err != nil {
-		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
+	var sshconf *ssh.ClientConfig
+	if !cfg.mock {
+		sshconf, err = sshVng.CreateSSHConfig(cfg.sshKeyFn, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
+		if err != nil {
+			log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
+		}
 	}
 
 	db, err := pgsql.CreateDBPool(cfg.dbURL)
@@ -85,22 +89,24 @@ func main() {
 		}
 	}
 
-	// try to set vip brigade
-	if !cfg.silent {
-		fmt.Fprintf(os.Stderr, "%s: Try to set VIP brigades\n", LogTag)
-	}
+	if !cfg.mock {
+		// try to set vip brigade
+		if !cfg.silent {
+			fmt.Fprintf(os.Stderr, "%s: Try to set VIP brigades\n", LogTag)
+		}
 
-	if err := viparize(ctx, db, sshconf, cfg.silent); err != nil {
-		log.Fatalf("%s: Can't set VIP brigades: %s\n", LogTag, err)
-	}
+		if err := viparize(ctx, db, sshconf, cfg.silent); err != nil {
+			log.Fatalf("%s: Can't set VIP brigades: %s\n", LogTag, err)
+		}
 
-	// try to restore deleted vip brigade
-	if !cfg.silent {
-		fmt.Fprintf(os.Stderr, "%s: Try to restore deleted VIP brigades\n", LogTag)
-	}
+		// try to restore deleted vip brigade
+		if !cfg.silent {
+			fmt.Fprintf(os.Stderr, "%s: Try to restore deleted VIP brigades\n", LogTag)
+		}
 
-	if err := viparizeDeleted(ctx, db, sshconf, cfg.mock, cfg.debug, cfg.silent); err != nil {
-		log.Fatalf("%s: Can't restore deleted VIP brigades: %s\n", LogTag, err)
+		if err := viparizeDeleted(ctx, db, sshconf, cfg.mock, cfg.debug, cfg.silent); err != nil {
+			log.Fatalf("%s: Can't restore deleted VIP brigades: %s\n", LogTag, err)
+		}
 	}
 
 	// try to create credentials for VIP brigades
@@ -120,13 +126,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: Can't set VIP brigades: %s\n", LogTag, err)
 	}
 
-	// try to unset vip brigade
-	if !cfg.silent {
-		fmt.Fprintf(os.Stderr, "%s: Try to unset VIP brigades\n", LogTag)
-	}
+	if !cfg.mock {
+		// try to unset vip brigade
+		if !cfg.silent {
+			fmt.Fprintf(os.Stderr, "%s: Try to unset VIP brigades\n", LogTag)
+		}
 
-	if err := unviparize(ctx, db, sshconf, cfg.silent); err != nil {
-		log.Fatalf("%s: Can't unset VIP brigades: %s\n", LogTag, err)
+		if err := unviparize(ctx, db, sshconf, cfg.silent); err != nil {
+			log.Fatalf("%s: Can't unset VIP brigades: %s\n", LogTag, err)
+		}
 	}
 
 	if !cfg.silent {

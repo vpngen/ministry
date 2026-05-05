@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httputil"
 	"net/netip"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/vpngen/keydesk/gen/models"
 	"github.com/vpngen/keydesk/keydesk"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"golang.org/x/crypto/ssh"
@@ -39,6 +41,46 @@ var (
 	ErrAttemptLimitExceeded  = errors.New("attempt limit exceeded")
 	ErrDraftRealmNotFound    = errors.New("draft realm not found")
 )
+
+func MockComposeBrigade(ctx context.Context, db *pgxpool.Pool,
+	tag string,
+	vip bool, brigadeID uuid.UUID,
+	fullname string, person *namesgenerator.Person,
+) (*dcmgmt.Answer, error) {
+	realmID, addr, err := DefineBrigadeRealm(ctx, db, brigadeID)
+	if err != nil {
+		return nil, fmt.Errorf("define realm: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "%s: mock brigade %s -> realm %s (%s)\n", tag, brigadeID, realmID, addr)
+
+	if err := promoteBrigadierRealm(ctx, db, brigadeID, realmID); err != nil {
+		return nil, fmt.Errorf("promote realm: %w", err)
+	}
+
+	return buildMockAnswer(), nil
+}
+
+func buildMockAnswer() *dcmgmt.Answer {
+	fileName := "mock_brigade.conf"
+	fileContent := "[Interface]\nPrivateKey = mock\n"
+
+	return &dcmgmt.Answer{
+		FreeSlots:   10,
+		KeydeskIPv6: netip.MustParseAddr("fe80::1"),
+		Answer: keydesk.Answer{
+			Code:    http.StatusCreated,
+			Desc:    http.StatusText(http.StatusCreated),
+			Status:  keydesk.AnswerStatusSuccess,
+			Configs: models.Newuser{
+				WireguardConfig: &models.NewuserWireguardConfig{
+					FileName:    &fileName,
+					FileContent: &fileContent,
+				},
+			},
+		},
+	}
+}
 
 func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 	sshconf *ssh.ClientConfig, tag string,

@@ -22,6 +22,7 @@ import (
 	"github.com/vpngen/ministry/internal/pgsql"
 	sshVng "github.com/vpngen/ministry/internal/ssh"
 	"github.com/vpngen/wordsgens/namesgenerator"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -50,7 +51,7 @@ var (
 func main() {
 	var w io.WriteCloser
 
-	person, fullname, chunked, jout, token, label, labelID, fv, err := parseArgs()
+	person, fullname, chunked, jout, token, label, labelID, fv, mock, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -63,14 +64,22 @@ func main() {
 		w = os.Stdout
 	}
 
-	sshKeyFilename, dbURL, schema, err := readConfigs()
+	dbURL, schema, err := readDBConfig()
 	if err != nil {
-		fatal(w, jout, "Can't read configs: %s\n", err)
+		fatal(w, jout, "%s: Can't read db config: %s\n", LogTag, err)
 	}
 
-	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
-	if err != nil {
-		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+	var sshconf *ssh.ClientConfig
+	if !mock {
+		sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+		if err != nil {
+			fatal(w, jout, "%s: Can't find ssh key: %s\n", LogTag, err)
+		}
+
+		sshconf, err = sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
+		if err != nil {
+			fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+		}
 	}
 
 	db, err := pgsql.CreateDBPool(dbURL)
@@ -89,14 +98,26 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	brigadeID, mnemo, fullname, person, err := core.CreateBrigade(ctx, db, seedExtra, partnerID, brigadeCreationType, person, fullname, label, labelID, fv)
+	var (
+		mnemo     string
+		brigadeID uuid.UUID
+	)
+
+	brigadeID, mnemo, fullname, person, err = core.CreateBrigade(ctx, db, seedExtra, partnerID, brigadeCreationType, person, fullname, label, labelID, fv)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
+	var vpnconf *dcmgmt.Answer
+
+	if mock {
+		vpnconf, err = core.MockComposeBrigade(ctx, db, LogTag, false, brigadeID, fullname, person)
+	} else {
+		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
+	}
+
 	if err != nil {
-		fatal(w, jout, "%s: Can't request brigade: %s\n", LogTag, err)
+		fatal(w, jout, "%s: Can't compose brigade: %s\n", LogTag, err)
 	}
 
 	// TODO: Repeated code
@@ -174,26 +195,21 @@ func main() {
 	}
 }
 
-func readConfigs() (string, string, string, error) {
+func readDBConfig() (string, string, error) {
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
 		dbURL = defaultDatabaseURL
 	}
 
-	brigadesSchema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
-	if brigadesSchema == "" {
-		brigadesSchema = defaultBrigadesSchema
+	schema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
+	if schema == "" {
+		schema = defaultBrigadesSchema
 	}
 
-	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
-	if err != nil {
-		return "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
-	}
-
-	return sshKeyFilename, dbURL, brigadesSchema, nil
+	return dbURL, schema, nil
 }
 
-func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, string, int64, error) {
+func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, string, int64, bool, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 	jout := flag.Bool("j", false, "json output")
 	label := flag.String("l", "", "label")
@@ -201,11 +217,12 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 	labelTime := flag.Int("lt", 0, "first visit")
 	customName := flag.String("name", "", "custom brigadier fullname")
 	forcePerson := flag.String("p", "", "force person")
+	mock := flag.Bool("mock", false, "mock brigade creation")
 
 	flag.Parse()
 
 	if *label != "" && len(*label) > maxStartLabelLen {
-		return nil, "", false, false, nil, "", "", 0, fmt.Errorf("label: %w", ErrLabelTooLong)
+		return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("label: %w", ErrLabelTooLong)
 	}
 
 	id := *labelID
@@ -220,24 +237,24 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return nil, "", false, false, nil, "", "", 0, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
+		return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return nil, "", false, false, nil, "", "", 0, fmt.Errorf("access token: %w", err)
+		return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("access token: %w", err)
 	}
 
 	var person *namesgenerator.Person
 	if *forcePerson != "" {
 		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*forcePerson)
 		if err != nil {
-			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("force person: %w", err)
+			return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("force person: %w", err)
 		}
 
 		if err := json.Unmarshal(buf, &person); err != nil {
-			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("force person: %w", err)
+			return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("force person: %w", err)
 		}
 	}
 
@@ -245,11 +262,11 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 	if *customName != "" {
 		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*customName)
 		if err != nil {
-			return nil, "", false, false, nil, "", "", 0, fmt.Errorf("custom name: %w", err)
+			return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("custom name: %w", err)
 		}
 
 		fullname = string(buf)
 	}
 
-	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), nil
+	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), *mock, nil
 }

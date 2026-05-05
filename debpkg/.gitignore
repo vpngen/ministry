@@ -1,2 +1,4 @@
 *.deb
 history.txt
+ministry/
+bin/

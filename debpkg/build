@@ -95,6 +95,15 @@ if [ "$1" = "pkg" ]; then
 fi
 
 GOLANG_VER="$(grep -e "^go\s" "$(dirname "$0")/../go.mod" | awk '{print $2}')"
+IMAGE_NAME="vg-ministry-builder:${GOLANG_VER}"
+
+if [ "$1" = "image" ]; then
+        docker build \
+                --build-arg GOLANG_VER="${GOLANG_VER}" \
+                -t "${IMAGE_NAME}" \
+                "$(dirname "$0")"
+        exit 0
+fi
 
 # Get the current branch
 BRANCH=$(git branch --show-current)
@@ -114,5 +123,5 @@ docker run --rm \
         -e GIT_USER="${GIT_USER}" \
         -e GIT_PASSWORD="${GIT_PASSWORD}" \
         -v "${PWD}":"${SHARED_BASE}" \
-        golang:"${GOLANG_VER}" "${SHARED_BASE}/build" pkg
+        "${IMAGE_NAME}" "${SHARED_BASE}/build" pkg
 

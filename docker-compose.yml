@@ -1,0 +1,36 @@
+services:
+  ministry:
+    build:
+      context: debpkg
+      dockerfile: Dockerfile
+    volumes:
+      - .:/data
+    working_dir: /data
+    environment:
+      DB_URL: postgresql://postgres:postgres@db/vgdept
+      BRIGADES_ADMIN_SCHEMA: head
+      GIT_USER: ${GIT_USER:-git}
+      GIT_PASSWORD: ${GIT_PASSWORD:-}
+    command: sleep infinity
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: vgdept
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/sql:ro
+      - ./docker/init-db.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

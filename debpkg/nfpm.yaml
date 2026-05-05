@@ -248,9 +248,9 @@ contents:
 overrides:
   deb:
     scripts:
-      preinstall: /data/src/preinstall.sh
-      postinstall: /data/src/postinstall.sh
-      preremove: /data/src/preremove.sh
-      postremove: /data/src/postremove.sh
+      preinstall: src/preinstall.sh
+      postinstall: src/postinstall.sh
+      preremove: src/preremove.sh
+      postremove: src/postremove.sh
 deb:
   compression: xz

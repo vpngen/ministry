@@ -22,6 +22,8 @@ EXCEPTION
         RAISE NOTICE 'Trigger brigadier_vip_update_time_trigger already exists. Ignoring...';
 END$$;
 
+ALTER TABLE :"schema_name".brigadier_vip ADD COLUMN IF NOT EXISTS vip_variant text NOT NULL DEFAULT '';
+
 CREATE INDEX brigadier_vip_variant_idx ON :"schema_name".brigadier_vip (vip_variant);
 
 -- Partners actions reference table.

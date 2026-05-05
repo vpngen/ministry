@@ -5,3 +5,6 @@ conf/*
 !/conf/keep-me
 vendor
 *.key
+history.txt
+pkg/
+DOCUMENTATION.md

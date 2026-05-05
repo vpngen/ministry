@@ -17,6 +17,7 @@ go build -C ministry/cmd/synclabels -o ../../../bin/synclabels
 
 go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1 # fix go 1.24
 
+mkdir -p "${SHARED_BASE}/pkg"
 nfpm package --config "ministry/debpkg/nfpm.yaml" --target "${SHARED_BASE}/pkg" --packager deb
 
 chown "${USER_UID}":"${USER_UID}" "${SHARED_BASE}/pkg/"*.deb

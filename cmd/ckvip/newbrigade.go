@@ -93,7 +93,7 @@ func getNotCreatedVIP(ctx context.Context, db *pgxpool.Pool) ([]tgVipBrigade, er
 	return brigades, nil
 }
 
-func newCreds(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, silent bool) error {
+func newCreds(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, mock bool, silent bool) error {
 	brigades, err := getNotCreatedVIP(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get not created vip: %w", err)
@@ -125,7 +125,7 @@ func newCreds(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, 
 			fmt.Fprintf(os.Stderr, "%s: Created brigade: %s, Name: %s\n", LogTag, brigadeID, fullname)
 		}
 
-		if err := composeBrigade(ctx, db, sshconf, brigadeID, mnemo, fullname, person); err != nil {
+		if err := composeBrigade(ctx, db, sshconf, mock, brigadeID, mnemo, fullname, person); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: ERROR: Can't compose brigade: %s: %d: %s\n", LogTag, brigade.BrigadeID, brigade.TelegramID, err)
 
 			continue
@@ -135,8 +135,17 @@ func newCreds(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, 
 	return nil
 }
 
-func composeBrigade(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, brigadeID uuid.UUID, mnemo, fullname string, person *namesgenerator.Person) error {
-	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, true, brigadeID, fullname, person)
+func composeBrigade(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, mock bool, brigadeID uuid.UUID, mnemo, fullname string, person *namesgenerator.Person) error {
+	var (
+		vpnconf *dcmgmt.Answer
+		err     error
+	)
+
+	if mock {
+		vpnconf, err = core.MockComposeBrigade(ctx, db, LogTag, true, brigadeID, fullname, person)
+	} else {
+		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, true, brigadeID, fullname, person)
+	}
 	if err != nil {
 		return fmt.Errorf("compose brigade: %w", err)
 	}
@@ -270,7 +279,7 @@ func getNotPromotedVIP(ctx context.Context, db *pgxpool.Pool) ([]tgVipBrigade, e
 	return brigades, nil
 }
 
-func nextTryNewBrigade(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, silent bool) error {
+func nextTryNewBrigade(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, mock bool, silent bool) error {
 	brigades, err := getNotPromotedVIP(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get not promoted vip: %w", err)
@@ -293,7 +302,7 @@ func nextTryNewBrigade(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.Clien
 			fmt.Fprintf(os.Stderr, "%s: Promoting brigade: %s\n", LogTag, brigade.BrigadeID)
 		}
 
-		if err := composeBrigade(ctx, db, sshconf, brigade.BrigadeID, brigade.Mnemo, brigade.Name, &brigade.Person); err != nil {
+		if err := composeBrigade(ctx, db, sshconf, mock, brigade.BrigadeID, brigade.Mnemo, brigade.Name, &brigade.Person); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: ERROR: Can't compose brigade: %s: %s\n", LogTag, brigade.BrigadeID, err)
 
 			continue

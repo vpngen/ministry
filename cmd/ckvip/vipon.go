@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/ministry/internal/core"
 	"github.com/vpngen/wordsgens/namesgenerator"
 	"golang.org/x/crypto/ssh"
@@ -161,7 +162,7 @@ func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, 
 	return nil
 }
 
-func viparizeDeleted(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, debug bool, silent bool) error {
+func viparizeDeleted(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, mock bool, debug bool, silent bool) error {
 	brigades, err := getDeletedBrigadesToVIParize(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get deleted brigades to viparize: %w", err)
@@ -174,7 +175,16 @@ func viparizeDeleted(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientC
 	for _, brigade := range brigades {
 		fmt.Fprintf(os.Stderr, "%s: Restore deleted brigade: %s:%s\n", LogTag, brigade.Name, brigade.BrigadeID)
 
-		vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, true, brigade.BrigadeID, brigade.Name, &brigade.Person)
+		var (
+			vpnconf *dcmgmt.Answer
+			err     error
+		)
+
+		if mock {
+			vpnconf, err = core.MockComposeBrigade(ctx, db, LogTag, true, brigade.BrigadeID, brigade.Name, &brigade.Person)
+		} else {
+			vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, true, brigade.BrigadeID, brigade.Name, &brigade.Person)
+		}
 		if err != nil {
 			return fmt.Errorf("compose brigade: %w", err)
 		}

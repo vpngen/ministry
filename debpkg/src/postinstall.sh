@@ -18,7 +18,7 @@ echo "head migration user: $HEAD_MIGRATION_DBUSER"
 SQL_DIR="/usr/share/vg-head/sql"
 
 load_sql_file () {
-        cat "$1" | sudo -u "${DBUSER}" psql -d "${DBNAME}" -v ON_ERROR_STOP=yes \
+        cat "$1" | runuser -u "${DBUSER}" -- psql -d "${DBNAME}" -v ON_ERROR_STOP=yes \
                 --set schema_name="${SCHEMA}" \
                 --set head_stats_dbuser="${HEAD_STATS_DBUSER}" \
                 --set head_admin_dbuser="${HEAD_ADMIN_DBUSER}" \
@@ -32,11 +32,15 @@ load_sql_file () {
 }
 
 init_database () {
-        # Create database
-        echo "CREATE DATABASE :dbname;" | sudo -u "${DBUSER}" psql --set dbname="${DBNAME}" -v ON_ERROR_STOP=yes
-        rc=$?
-        if [ ${rc} -ne 0 ]; then
-                exit 1
+        # Create database only if it does not exist
+        if runuser -u "${DBUSER}" -- psql -lqt | cut -d\| -f1 | grep -qw "${DBNAME}"; then
+                echo "Database ${DBNAME} already exists, skipping creation"
+        else
+                echo "CREATE DATABASE :dbname;" | runuser -u "${DBUSER}" -- psql --set dbname="${DBNAME}" -v ON_ERROR_STOP=yes
+                rc=$?
+                if [ ${rc} -ne 0 ]; then
+                        exit 1
+                fi
         fi
 
         # Init database
@@ -53,7 +57,7 @@ apply_database_patches () {
                 load_sql_file "${patch}"
         done
 
-        sudo -u "${DBUSER}" psql -v ON_ERROR_STOP=yes -c "SELECT pg_reload_conf();"
+        runuser -u "${DBUSER}" -- psql -v ON_ERROR_STOP=yes -c "SELECT pg_reload_conf();"
         rc=$?
         if [ ${rc} -ne 0 ]; then
                 exit 1

@@ -28,6 +28,7 @@ type config struct {
 	debug     bool
 	onlyfetch bool
 	silent    bool
+	mock      bool
 
 	jwtKeydeskIssuer jwtsvc.KeydeskTokenIssuer
 
@@ -73,6 +74,8 @@ func parseArgs() (config, error) {
 	}
 
 	cfg.sshKeyFn = sshKeyFilename
+
+	cfg.mock = os.Getenv("MOCK") == "true"
 
 	debug := flag.Bool("debug", false, "Debug")
 	silent := flag.Bool("s", false, "Silent")

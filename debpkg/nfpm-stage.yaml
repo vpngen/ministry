@@ -1,0 +1,264 @@
+name: "vg-head-stage"
+arch: "amd64"
+platform: "linux"
+version: ${PACKAGE_VERSION}
+section: "default"
+priority: "optional"
+release: ${PACKAGE_RELEASE}
+
+provides:
+- vg-head-stage
+depends:
+- openssh-client
+- sudo
+- postgresql
+- jq
+
+maintainer: "Ingmund Ollson <ingmund@proton.me>"
+description: VPNGen Ministry (head)
+vendor: "VPNGen"
+homepage: "http://vpngen.org"
+license: "LGPL"
+
+contents:
+- dst: /etc/vgdept
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+
+- src: ministry/debpkg/src/vg-head-stats.env.sample
+  dst: /etc/vgdept/vg-head-stats.env.sample
+  file_info:
+    mode: 0440
+    owner: vg_head_stats
+    group: vg_head_stats
+
+- dst: /etc/vgdept/vg-head-stats.env
+  type: ghost
+
+- src: ministry/debpkg/src/ckvip-stage.env
+  dst: /etc/vgdept/ckvip.env
+  type: config
+  file_info:
+    mode: 0440
+    owner: vg_head_vpnapi
+    group: vg_head_vpnapi
+
+- dst: /opt/vg-head-vpnapi
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: bin/checkbrigadier
+  dst: /opt/vg-head-vpnapi/checkbrigadier
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/ckvip
+  dst: /opt/vg-head-vpnapi/ckvip
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/readmsgs
+  dst: /opt/vg-head-vpnapi/readmsgs
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/reqvipid
+  dst: /opt/vg-head-vpnapi/reqvipid
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/createbrigade
+  dst: /opt/vg-head-vpnapi/createbrigade
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/restorebrigadier
+  dst: /opt/vg-head-vpnapi/restorebrigadier
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/synclabels
+  dst: /opt/vg-head-vpnapi/synclabels
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/delete_brigadier.sh
+  dst: /opt/vg-head-vpnapi/delete_brigadier.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_brigadiers.sh
+  dst: /opt/vg-head-vpnapi/purge_brigadiers.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_draft.sh
+  dst: /opt/vg-head-vpnapi/purge_draft.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_inactive.sh
+  dst: /opt/vg-head-vpnapi/purge_inactive.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_never_visited.sh
+  dst: /opt/vg-head-vpnapi/purge_never_visited.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/purge_empty.sh
+  dst: /opt/vg-head-vpnapi/purge_empty.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/sync_abandoned.sh
+  dst: /opt/vg-head-vpnapi/sync_abandoned.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/sync_deleted.sh
+  dst: /opt/vg-head-vpnapi/sync_deleted.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/scripts/sync_free_slots.sh
+  dst: /opt/vg-head-vpnapi/sync_free_slots.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/cmd/sshcmd/ssh_command.sh
+  dst: /opt/vg-head-vpnapi/ssh_command.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /opt/vg-head-stats
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: bin/syncstats
+  dst: /opt/vg-head-stats/syncstats
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /opt/vg-head-admin
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: ministry/cmd/realms/realms.sh
+  dst: /opt/vg-head-admin/realms.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/recodesnaps
+  dst: /opt/vg-head-vpnapi/recodesnaps
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/recodesnapmap
+  dst: /opt/vg-head-vpnapi/recodesnapmap
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/cmd/switchremotemigr/switch_remote_migr.sh
+  dst: /opt/vg-head-vpnapi/switch_remote_migr.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /opt/vg-partners-admin
+  type: dir
+  file_info:
+    mode: 0111
+    owner: root
+    group: root
+- src: ministry/cmd/partners/partners.sh
+  dst: /opt/vg-partners-admin/partners.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: ministry/cmd/partners/tokens.sh
+  dst: /opt/vg-partners-admin/tokens.sh
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+
+- dst: /usr/share/vg-head
+  type: dir
+  file_info:
+    mode: 0755
+    owner: root
+    group: root
+
+- src: ministry/sql
+  dst: /usr/share/vg-head/sql
+
+- src: ministry/systemd/vg-sync-ids.timer
+  dst: /etc/systemd/system/vg-sync-ids.timer
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-sync-ids.service
+  dst: /etc/systemd/system/vg-sync-ids.service
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckvip.timer
+  dst: /etc/systemd/system/vg-ckvip.timer
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckvip.service
+  dst: /etc/systemd/system/vg-ckvip.service
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+
+overrides:
+  deb:
+    scripts:
+      preinstall: src/preinstall.sh
+      postinstall: src/postinstall.sh
+      preremove: src/preremove.sh
+      postremove: src/postremove.sh
+deb:
+  compression: xz

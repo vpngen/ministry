@@ -1,5 +1,22 @@
 services:
+  ministry-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${JWT_KEY_PATH:-./keydesk-jwt.key}:/etc/vgdept/keydesk-jwt.key:ro
+    environment:
+      DB_URL: ${DB_URL:-postgresql://postgres:postgres@db/vgdept}
+      LISTEN_ADDR: :8080
+      OBFS_UUID: ${OBFS_UUID}
+      VIP_ENDPOINT: ${VIP_ENDPOINT:-vip-test.vpngen.org}
+    command: /usr/local/bin/ministry-api
+
+  # dev profile — only started locally with: docker-compose --profile dev up
   ministry:
+    profiles: [dev]
     build:
       context: debpkg
       dockerfile: Dockerfile
@@ -17,6 +34,7 @@ services:
         condition: service_healthy
 
   db:
+    profiles: [dev]
     image: postgres:16-bookworm
     environment:
       POSTGRES_DB: vgdept

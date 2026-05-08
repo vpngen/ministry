@@ -1,0 +1,74 @@
+basePath: /
+definitions:
+  main.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  main.ReserveRequest:
+    properties:
+      brigade_id:
+        type: string
+      user_identity:
+        type: string
+    type: object
+  main.ReserveResponse:
+    properties:
+      ok:
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: Ministry REST API — proxy layer over VIP server (vip.vpn.works).
+  title: Ministry API
+  version: "1.0"
+paths:
+  /reserve:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Marks a brigade as paid on the VIP server. The brigade must already
+        exist in the ministry DB (created via SSH reqvipid).
+      parameters:
+      - description: Bearer <base64url-partner-token>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: brigade_id (obfuscated) + expire_at
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.ReserveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.ReserveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Reserve VIP brigade
+      tags:
+      - vip
+schemes:
+- http
+- https
+swagger: "2.0"

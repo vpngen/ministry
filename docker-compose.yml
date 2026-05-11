@@ -9,7 +9,7 @@ services:
       - /etc/vgdept/keydesk-jwt.key:/etc/vgdept/keydesk-jwt.key:ro
       - /var/run/postgresql:/var/run/postgresql
     environment:
-      DB_URL: postgresql:///vgdept
+      DB_URL: postgresql:///vgdept?user=vg_head_vpnapi
       LISTEN_ADDR: :8080
       OBFS_UUID: ${OBFS_UUID}
       VIP_ENDPOINT: ${VIP_ENDPOINT:-vip-test.vpngen.org}

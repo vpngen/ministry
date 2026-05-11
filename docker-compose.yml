@@ -1,54 +1,11 @@
 services:
   ministry-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
+    network_mode: host
     volumes:
-      - ${JWT_KEY_PATH:-/etc/vgdept/keydesk-jwt.key}:/etc/vgdept/keydesk-jwt.key:ro
+      - /etc/vgdept/keydesk-jwt.key:/etc/vgdept/keydesk-jwt.key:ro
+      - /var/run/postgresql:/var/run/postgresql
     environment:
-      DB_URL: ${DB_URL:-postgresql://postgres:postgres@db/vgdept}
+      DB_URL: postgresql:///vgdept
       LISTEN_ADDR: :8080
       OBFS_UUID: ${OBFS_UUID}
       VIP_ENDPOINT: ${VIP_ENDPOINT:-vip-test.vpngen.org}
-    command: /usr/local/bin/ministry-api
-
-  # dev profile — only started locally with: docker-compose --profile dev up
-  ministry:
-    profiles: [dev]
-    build:
-      context: debpkg
-      dockerfile: Dockerfile
-    volumes:
-      - .:/data
-    working_dir: /data
-    environment:
-      DB_URL: postgresql://postgres:postgres@db/vgdept
-      BRIGADES_ADMIN_SCHEMA: head
-      GIT_USER: ${GIT_USER:-git}
-      GIT_PASSWORD: ${GIT_PASSWORD:-}
-    command: sleep infinity
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    profiles: [dev]
-    image: postgres:16-bookworm
-    environment:
-      POSTGRES_DB: vgdept
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./sql:/sql:ro
-      - ./docker/init-db.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  pgdata:

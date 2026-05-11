@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const logTag = "reserveHandler"
 
 // ReserveRequest is the body sent by tgbot.
 // brigade_id is the obfuscated UUID returned by reqvipid.
@@ -71,43 +74,55 @@ func reserveHandler(db *pgxpool.Pool, cfg config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		log.Printf("%s: incoming request from %s", logTag, r.RemoteAddr)
+
 		// --- auth ---
 		authHeader := r.Header.Get("Authorization")
 		parts := strings.SplitN(authHeader, " ", 2)
 
 		if len(parts) != 2 || parts[0] != "Bearer" {
+			log.Printf("%s: missing or malformed Authorization header", logTag)
 			writeError(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		tokenBytes, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(parts[1])
 		if err != nil {
+			log.Printf("%s: invalid token encoding: %s", logTag, err)
 			writeError(w, "invalid token encoding", http.StatusUnauthorized)
 			return
 		}
 
-		_, ok, err := checkToken(ctx, db, defaultBrigadesSchema, tokenBytes)
+		partnerID, ok, err := checkToken(ctx, db, defaultBrigadesSchema, tokenBytes)
 		if err != nil || !ok {
+			log.Printf("%s: token check failed: err=%v ok=%v", logTag, err, ok)
 			writeError(w, "access denied", http.StatusUnauthorized)
 			return
 		}
 
+		log.Printf("%s: authenticated partner %s", logTag, partnerID)
+
 		// --- parse body ---
 		var req ReserveRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("%s: invalid request body: %s", logTag, err)
 			writeError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		if req.BrigadeID == uuid.Nil {
+			log.Printf("%s: brigade_id is nil", logTag)
 			writeError(w, "brigade_id required", http.StatusBadRequest)
 			return
 		}
 
 		if req.UserIdentity == "" {
+			log.Printf("%s: user_identity is empty", logTag)
 			writeError(w, "user_identity required", http.StatusBadRequest)
 			return
 		}
+
+		log.Printf("%s: reserving brigade_id=%s user_identity=%s", logTag, req.BrigadeID, req.UserIdentity)
 
 		// --- call VIP server ---
 		// brigade_id from tgbot is already obfuscated — that's the user_id the VIP server expects.
@@ -116,14 +131,17 @@ func reserveHandler(db *pgxpool.Pool, cfg config) http.HandlerFunc {
 			UserIdentity: req.UserIdentity,
 		})
 		if err != nil {
+			log.Printf("%s: marshal payload: %s", logTag, err)
 			writeError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
-		vipReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-			fmt.Sprintf("https://%s/partner_api/reserve", cfg.vipEndpoint),
-			bytes.NewReader(payload))
+		vipURL := fmt.Sprintf("https://%s/partner_api/reserve", cfg.vipEndpoint)
+		log.Printf("%s: calling VIP server at %s", logTag, vipURL)
+
+		vipReq, err := http.NewRequestWithContext(ctx, http.MethodPost, vipURL, bytes.NewReader(payload))
 		if err != nil {
+			log.Printf("%s: build vip request: %s", logTag, err)
 			writeError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
@@ -131,7 +149,9 @@ func reserveHandler(db *pgxpool.Pool, cfg config) http.HandlerFunc {
 		vipReq.Header.Set("Content-Type", "application/json")
 
 		resp, err := c.Do(vipReq)
+		log.Printf("%s: JWT token used: %s", logTag, c.Transport.(*BearerAuthTransport).Token())
 		if err != nil {
+			log.Printf("%s: vip server unreachable: %s", logTag, err)
 			writeError(w, fmt.Sprintf("vip server unreachable: %s", err), http.StatusBadGateway)
 			return
 		}
@@ -140,9 +160,12 @@ func reserveHandler(db *pgxpool.Pool, cfg config) http.HandlerFunc {
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
+			log.Printf("%s: read vip response body: %s", logTag, err)
 			writeError(w, "failed to read vip server response", http.StatusBadGateway)
 			return
 		}
+
+		log.Printf("%s: vip server status=%d body=%s", logTag, resp.StatusCode, body)
 
 		if resp.StatusCode != http.StatusOK {
 			writeError(w, fmt.Sprintf("vip server: %s", body), http.StatusBadGateway)
@@ -151,14 +174,18 @@ func reserveHandler(db *pgxpool.Pool, cfg config) http.HandlerFunc {
 
 		var vipResp vipReserveResponse
 		if err := json.Unmarshal(body, &vipResp); err != nil {
+			log.Printf("%s: parse vip response: %s", logTag, err)
 			writeError(w, "invalid response from vip server", http.StatusBadGateway)
 			return
 		}
 
 		if vipResp.Result != "success" {
+			log.Printf("%s: vip server returned non-success result: %s", logTag, vipResp.Result)
 			writeError(w, fmt.Sprintf("vip server: %s", vipResp.Result), http.StatusBadGateway)
 			return
 		}
+
+		log.Printf("%s: brigade_id=%s reserved successfully", logTag, req.BrigadeID)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ReserveResponse{OK: true})

@@ -51,6 +51,10 @@ func main() {
 		log.Fatalf("%s: Can't fetch paid users: %s\n", LogTag, err)
 	}
 
+	if !cfg.silent {
+		fmt.Fprintf(os.Stderr, "%s: JWT token: %s\n", LogTag, c.Transport.(*BearerAuthTransport).Token())
+	}
+
 	goods := 0
 	for _, brigade := range brigades {
 		if cfg.debug {

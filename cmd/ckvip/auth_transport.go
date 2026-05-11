@@ -82,6 +82,10 @@ func (t *BearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	return t.transport().RoundTrip(req2)
 }
 
+func (t *BearerAuthTransport) Token() string {
+	return t.token
+}
+
 func (t *BearerAuthTransport) transport() http.RoundTripper {
 	if t.Transport != nil {
 		return t.Transport

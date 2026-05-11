@@ -6,7 +6,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ${JWT_KEY_PATH:-./keydesk-jwt.key}:/etc/vgdept/keydesk-jwt.key:ro
+      - ${JWT_KEY_PATH:-/etc/vgdept/keydesk-jwt.key}:/etc/vgdept/keydesk-jwt.key:ro
     environment:
       DB_URL: ${DB_URL:-postgresql://postgres:postgres@db/vgdept}
       LISTEN_ADDR: :8080

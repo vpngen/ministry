@@ -15,14 +15,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const defaultVIPDuration = 30 * 24 * time.Hour // 30 days
+
 const logTag = "reserveHandler"
 
 // ReserveRequest is the body sent by tgbot.
 // brigade_id is the obfuscated UUID returned by reqvipid.
 // user_identity is the Telegram ChatID.
+// expire_at is optional — defaults to now+30 days if zero.
 type ReserveRequest struct {
 	BrigadeID    uuid.UUID `json:"brigade_id"`
 	UserIdentity string    `json:"user_identity"`
+	ExpireAt     time.Time `json:"expire_at,omitempty"`
 }
 
 // ReserveResponse is returned on success.
@@ -42,11 +46,10 @@ type vipReserveResponse struct {
 }
 
 // vipReservePayload is what we POST to partner_api/reserve on the VIP server.
-// Matches the PaidUser shape the VIP server uses in fetchPaidUsers responses.
-// Confirm exact field names with Oleg if needed.
 type vipReservePayload struct {
-	UserID       uuid.UUID `json:"user_id"`
-	UserIdentity string    `json:"user_idenity"` // note: typo is intentional, matches Oleg's API
+	UserID             uuid.UUID `json:"user_id"`
+	UserIdentity       string    `json:"user_idenity"`        // note: typo is intentional, matches Oleg's API
+	GoodExpiryDatetime time.Time `json:"good_expiry_datetime"` // required — VIP filters by this in fetchPaidUsers
 }
 
 // reserveHandler proxies a brigade reservation to the VIP server.
@@ -122,13 +125,19 @@ func reserveHandler(db *pgxpool.Pool, cfg config) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("%s: reserving brigade_id=%s user_identity=%s", logTag, req.BrigadeID, req.UserIdentity)
+		expireAt := req.ExpireAt
+		if expireAt.IsZero() {
+			expireAt = time.Now().UTC().Add(defaultVIPDuration)
+		}
+
+		log.Printf("%s: reserving brigade_id=%s user_identity=%s expire_at=%s", logTag, req.BrigadeID, req.UserIdentity, expireAt.Format(time.RFC3339))
 
 		// --- call VIP server ---
 		// brigade_id from tgbot is already obfuscated — that's the user_id the VIP server expects.
 		payload, err := json.Marshal(vipReservePayload{
-			UserID:       req.BrigadeID,
-			UserIdentity: req.UserIdentity,
+			UserID:             req.BrigadeID,
+			UserIdentity:       req.UserIdentity,
+			GoodExpiryDatetime: expireAt,
 		})
 		if err != nil {
 			log.Printf("%s: marshal payload: %s", logTag, err)

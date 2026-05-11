@@ -1,5 +1,8 @@
 services:
   ministry-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
     network_mode: host
     volumes:
       - /etc/vgdept/keydesk-jwt.key:/etc/vgdept/keydesk-jwt.key:ro

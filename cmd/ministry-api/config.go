@@ -64,14 +64,13 @@ func parseConfig() (config, error) {
 
 	cfg.listenAddr = listenAddr
 
-	sysUser, err := user.Current()
-	if err != nil {
-		return cfg, fmt.Errorf("user: %w", err)
-	}
-
 	vipPrivkeyFn := filepath.Join(keydeskJwtDefaultDir, keydeskJwtPrivkeyFileName)
 	if _, err := os.Stat(vipPrivkeyFn); err != nil {
-		vipPrivkeyFn = filepath.Join(sysUser.HomeDir, keydeskJwtPrivkeyFileName)
+		sysUser, err := user.Current()
+		if err == nil {
+			vipPrivkeyFn = filepath.Join(sysUser.HomeDir, keydeskJwtPrivkeyFileName)
+		}
+
 		if _, err := os.Stat(vipPrivkeyFn); err != nil {
 			p, err := os.Executable()
 			if err != nil {

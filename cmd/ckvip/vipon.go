@@ -181,7 +181,7 @@ func viparizeDeleted(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientC
 		)
 
 		if mock {
-			vpnconf, err = core.MockComposeBrigade(ctx, db, LogTag, true, brigade.BrigadeID, brigade.Name, &brigade.Person)
+			vpnconf, err = core.MockComposeBrigade(LogTag, brigade.BrigadeID)
 		} else {
 			vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, true, brigade.BrigadeID, brigade.Name, &brigade.Person)
 		}

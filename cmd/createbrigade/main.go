@@ -111,7 +111,7 @@ func main() {
 	var vpnconf *dcmgmt.Answer
 
 	if mock {
-		vpnconf, err = core.MockComposeBrigade(ctx, db, LogTag, false, brigadeID, fullname, person)
+		vpnconf, err = core.MockComposeBrigade(LogTag, brigadeID)
 	} else {
 		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
 	}

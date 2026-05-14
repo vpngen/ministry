@@ -142,7 +142,7 @@ func composeBrigade(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientCo
 	)
 
 	if mock {
-		vpnconf, err = core.MockComposeBrigade(ctx, db, LogTag, true, brigadeID, fullname, person)
+		vpnconf, err = core.MockComposeBrigade(LogTag, brigadeID)
 	} else {
 		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, true, brigadeID, fullname, person)
 	}

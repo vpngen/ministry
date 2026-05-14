@@ -42,26 +42,9 @@ var (
 	ErrDraftRealmNotFound    = errors.New("draft realm not found")
 )
 
-func MockComposeBrigade(ctx context.Context, db *pgxpool.Pool,
-	tag string,
-	vip bool, brigadeID uuid.UUID,
-	fullname string, person *namesgenerator.Person,
-) (*dcmgmt.Answer, error) {
-	realmID, addr, err := DefineBrigadeRealm(ctx, db, brigadeID)
-	if err != nil {
-		return nil, fmt.Errorf("define realm: %w", err)
-	}
+func MockComposeBrigade(tag string, brigadeID uuid.UUID) (*dcmgmt.Answer, error) {
+	fmt.Fprintf(os.Stderr, "%s: mock brigade %s\n", tag, brigadeID)
 
-	fmt.Fprintf(os.Stderr, "%s: mock brigade %s -> realm %s (%s)\n", tag, brigadeID, realmID, addr)
-
-	if err := promoteBrigadierRealm(ctx, db, brigadeID, realmID); err != nil {
-		return nil, fmt.Errorf("promote realm: %w", err)
-	}
-
-	return buildMockAnswer(), nil
-}
-
-func buildMockAnswer() *dcmgmt.Answer {
 	fileName := "mock_brigade.conf"
 	fileContent := "[Interface]\nPrivateKey = mock\n"
 
@@ -69,9 +52,9 @@ func buildMockAnswer() *dcmgmt.Answer {
 		FreeSlots:   10,
 		KeydeskIPv6: netip.MustParseAddr("fe80::1"),
 		Answer: keydesk.Answer{
-			Code:    http.StatusCreated,
-			Desc:    http.StatusText(http.StatusCreated),
-			Status:  keydesk.AnswerStatusSuccess,
+			Code:   http.StatusCreated,
+			Desc:   http.StatusText(http.StatusCreated),
+			Status: keydesk.AnswerStatusSuccess,
 			Configs: models.Newuser{
 				WireguardConfig: &models.NewuserWireguardConfig{
 					FileName:    &fileName,
@@ -79,7 +62,7 @@ func buildMockAnswer() *dcmgmt.Answer {
 				},
 			},
 		},
-	}
+	}, nil
 }
 
 func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,

@@ -23,6 +23,7 @@ import (
 	"github.com/vpngen/ministry/internal/core"
 	"github.com/vpngen/ministry/internal/pgsql"
 	sshVng "github.com/vpngen/ministry/internal/ssh"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -40,7 +41,7 @@ var errInvalidArgs = errors.New("invalid args")
 func main() {
 	var w io.WriteCloser
 
-	name, mnemo, dryRun, chunked, jout, force, err := parseArgs()
+	name, mnemo, dryRun, chunked, jout, force, mock, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -53,14 +54,17 @@ func main() {
 		w = os.Stdout
 	}
 
-	sshKeyFilename, dbURL, err := readConfigs()
+	sshKeyFilename, dbURL, err := readConfigs(mock)
 	if err != nil {
 		fatal(w, jout, "Can't read configs: %s\n", err)
 	}
 
-	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
-	if err != nil {
-		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+	var sshconf *ssh.ClientConfig
+	if !mock {
+		sshconf, err = sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
+		if err != nil {
+			fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+		}
 	}
 
 	db, err := pgsql.CreateDBPool(dbURL)
@@ -99,7 +103,11 @@ func main() {
 			return
 		}
 
-		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, name, person)
+		if mock {
+			vpnconf, err = core.MockComposeBrigade(LogTag, brigadeID)
+		} else {
+			vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, name, person)
+		}
 		if err != nil {
 			fatal(w, jout, "%s: Can't bless brigade: %s\n", LogTag, err)
 		}
@@ -110,7 +118,11 @@ func main() {
 			return
 		}
 
-		vpnconf, err = core.ReplaceBrigadier(ctx, db, LogTag, sshconf, brigadeID)
+		if mock {
+			vpnconf, err = core.MockComposeBrigade(LogTag, brigadeID)
+		} else {
+			vpnconf, err = core.ReplaceBrigadier(ctx, db, LogTag, sshconf, brigadeID)
+		}
 		if err != nil {
 			fatal(w, jout, "%s: Can't replace brigade: %s\n", LogTag, err)
 		}
@@ -168,10 +180,14 @@ func main() {
 	}
 }
 
-func readConfigs() (string, string, error) {
+func readConfigs(mock bool) (string, string, error) {
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
 		dbURL = defaultDatabaseURL
+	}
+
+	if mock {
+		return "", dbURL, nil
 	}
 
 	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
@@ -182,16 +198,17 @@ func readConfigs() (string, string, error) {
 	return sshKeyFilename, dbURL, nil
 }
 
-func parseArgs() (string, string, bool, bool, bool, bool, error) {
+func parseArgs() (string, string, bool, bool, bool, bool, bool, error) {
 	dryRun := flag.Bool("n", false, "Dry run")
 	chunked := flag.Bool("ch", false, "chunked output")
 	jsonOut := flag.Bool("j", false, "json output")
 	force := flag.Bool("f", false, "force restore")
+	mock := flag.Bool("mock", false, "mock mode")
 
 	flag.Parse()
 
 	if (*force && flag.NArg() != 1) || (!*force && flag.NArg() != 2) {
-		return "", "", false, false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
+		return "", "", false, false, false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
 	}
 
 	// implicit base64 decoding
@@ -206,7 +223,7 @@ func parseArgs() (string, string, bool, bool, bool, bool, error) {
 		words = string(buf)
 	}
 
-	return sanitizeNames(name), sanitizeNames(words), *dryRun, *chunked, *jsonOut, *force, nil
+	return sanitizeNames(name), sanitizeNames(words), *dryRun, *chunked, *jsonOut, *force, *mock, nil
 }
 
 func sanitizeNames(name string) string {

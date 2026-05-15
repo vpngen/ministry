@@ -92,6 +92,12 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/reservebrigade
+  dst: /opt/vg-head-vpnapi/reservebrigade
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: bin/synclabels
   dst: /opt/vg-head-vpnapi/synclabels
   file_info:

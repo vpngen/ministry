@@ -34,6 +34,8 @@ elif [ "readmsgs" = "${cmd}" ]; then
     OBFS_UUID="${OBFS_UUID}" "${basedir}"/readmsgs "$@"
 elif [ "reqvipid" = "${cmd}" ]; then
     OBFS_UUID="${OBFS_UUID}" "${basedir}"/reqvipid "$@"
+elif [ "reservebrigade" = "${cmd}" ]; then
+    "${basedir}"/reservebrigade "$@"
 else
     echo "Unknown command: ${cmd}"
     printdef

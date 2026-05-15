@@ -14,6 +14,8 @@ go build -C ministry/cmd/syncstats -o ../../../bin/syncstats
 go build -C ministry/cmd/recodesnaps -o ../../../bin/recodesnaps
 go build -C ministry/cmd/recodesnapmap -o ../../../bin/recodesnapmap
 go build -C ministry/cmd/synclabels -o ../../../bin/synclabels
+go build -C ministry/cmd/reservebrigade -o ../../../bin/reservebrigade
+
 
 go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1 # fix go 1.24
 

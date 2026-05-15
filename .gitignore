@@ -8,3 +8,4 @@ vendor
 history.txt
 pkg/
 DOCUMENTATION.md
+.DS_Store

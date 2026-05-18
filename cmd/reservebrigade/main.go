@@ -32,6 +32,16 @@ const (
 	etcSubdir                 = "vg-keydesk"
 )
 
+type config struct {
+	mock bool
+
+	dbURL       string
+	schema      string
+	vipEndpoint string
+
+	jwtIssuer jwtsvc.KeydeskTokenIssuer
+}
+
 // vipReservePayload is posted to the VIP server's partner_api/reserve endpoint.
 type vipReservePayload struct {
 	UserID       uuid.UUID `json:"user_id"`
@@ -52,7 +62,7 @@ var errInvalidArgs = errors.New("invalid args")
 func main() {
 	var w io.WriteCloser
 
-	token, brigadeID, userIdentity, chunked, jout, mock, err := parseArgs()
+	token, brigadeID, userIdentity, chunked, jout, cfg, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -65,29 +75,14 @@ func main() {
 		w = os.Stdout
 	}
 
-	dbURL := os.Getenv("DB_URL")
-	if dbURL == "" {
-		dbURL = defaultDatabaseURL
-	}
-
-	schema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
-	if schema == "" {
-		schema = defaultBrigadesSchema
-	}
-
-	vipEndpoint := os.Getenv("VIP_ENDPOINT")
-	if vipEndpoint == "" {
-		vipEndpoint = defaultVipEndpoint
-	}
-
-	db, err := pgsql.CreateDBPool(dbURL)
+	db, err := pgsql.CreateDBPool(cfg.dbURL)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create db pool: %s\n", LogTag, err)
 	}
 
 	ctx := context.Background()
 
-	_, ok, err := checkToken(ctx, db, schema, token)
+	_, ok, err := checkToken(ctx, db, cfg.schema, token)
 	if err != nil || !ok {
 		if err != nil {
 			fatal(w, jout, "%s: Can't check token: %s\n", LogTag, err)
@@ -96,15 +91,10 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
-	if !mock {
-		jwtIssuer, err := loadJWTIssuer(vipEndpoint)
-		if err != nil {
-			fatal(w, jout, "%s: Can't load JWT issuer: %s\n", LogTag, err)
-		}
-
+	if !cfg.mock {
 		c := &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: NewBearerAuthTransport(jwtIssuer, nil),
+			Transport: NewBearerAuthTransport(&cfg.jwtIssuer, nil),
 		}
 
 		payload, err := json.Marshal(vipReservePayload{
@@ -115,7 +105,7 @@ func main() {
 			fatal(w, jout, "%s: Can't marshal payload: %s\n", LogTag, err)
 		}
 
-		vipURL := fmt.Sprintf("https://%s/partner_api/reserve", vipEndpoint)
+		vipURL := fmt.Sprintf("https://%s/partner_api/reserve", cfg.vipEndpoint)
 
 		vipReq, err := http.NewRequestWithContext(ctx, http.MethodPost, vipURL, bytes.NewReader(payload))
 		if err != nil {
@@ -167,54 +157,82 @@ func main() {
 	}
 }
 
-func loadJWTIssuer(vipEndpoint string) (*jwtsvc.KeydeskTokenIssuer, error) {
-	vipPrivkeyFn := filepath.Join(keydeskJwtDefaultDir, keydeskJwtPrivkeyFileName)
-	if _, err := os.Stat(vipPrivkeyFn); err != nil {
-		sysUser, err := user.Current()
-		if err == nil {
-			vipPrivkeyFn = filepath.Join(sysUser.HomeDir, keydeskJwtPrivkeyFileName)
-		}
+func parseArgs() ([]byte, uuid.UUID, string, bool, bool, config, error) {
+	cfg := config{}
 
-		if _, err := os.Stat(vipPrivkeyFn); err != nil {
-			p, err := os.Executable()
-			if err != nil {
-				return nil, fmt.Errorf("get executable path: %w", err)
-			}
-
-			vipPrivkeyFn = filepath.Join(filepath.Dir(p), etcSubdir, keydeskJwtPrivkeyFileName)
-			if _, err := os.Stat(vipPrivkeyFn); err != nil {
-				return nil, fmt.Errorf("stat jwt privkey %s: %w", vipPrivkeyFn, err)
-			}
-		}
+	vipEndpoint := os.Getenv("VIP_ENDPOINT")
+	if vipEndpoint == "" {
+		vipEndpoint = defaultVipEndpoint
 	}
 
-	signingMethod, jwtPrivkey, _, keyID, err := jwtsvc.ReadPrivateSSHKey(vipPrivkeyFn)
-	if err != nil {
-		return nil, fmt.Errorf("read jwt private key: %w", err)
+	cfg.vipEndpoint = vipEndpoint
+
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		dbURL = defaultDatabaseURL
 	}
 
-	opts := jwtsvc.KeydeskTokenOptions{
-		Issuer:        "ministry",
-		Subject:       reserveSubject,
-		Audience:      []string{"ministry", "socket"},
-		SigningMethod:  signingMethod,
-		VipURL:        vipEndpoint,
+	cfg.dbURL = dbURL
+
+	schema := os.Getenv("BRIGADES_ADMIN_SCHEMA")
+	if schema == "" {
+		schema = defaultBrigadesSchema
 	}
 
-	issuer := jwtsvc.NewKeydeskTokenIssuer(jwtPrivkey, keyID, opts)
+	cfg.schema = schema
 
-	return &issuer, nil
-}
+	// MOCK env var is the primary control (set by ckvip-stage.env on stage).
+	// The -mock flag is an additional override for ad-hoc use.
+	cfg.mock = os.Getenv("MOCK") == "true"
 
-func parseArgs() ([]byte, uuid.UUID, string, bool, bool, bool, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 	jout := flag.Bool("j", false, "json output")
 	mock := flag.Bool("mock", false, "mock mode")
 
 	flag.Parse()
 
+	cfg.mock = cfg.mock || *mock
+
+	if !cfg.mock {
+		sysUser, err := user.Current()
+		if err != nil {
+			return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("user: %w", err)
+		}
+
+		vipPrivkeyFn := filepath.Join(keydeskJwtDefaultDir, keydeskJwtPrivkeyFileName)
+		if _, err := os.Stat(vipPrivkeyFn); err != nil {
+			vipPrivkeyFn = filepath.Join(sysUser.HomeDir, keydeskJwtPrivkeyFileName)
+			if _, err := os.Stat(vipPrivkeyFn); err != nil {
+				p, err := os.Executable()
+				if err != nil {
+					return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("get executable path: %w", err)
+				}
+
+				vipPrivkeyFn = filepath.Join(filepath.Dir(p), etcSubdir, keydeskJwtPrivkeyFileName)
+				if _, err := os.Stat(vipPrivkeyFn); err != nil {
+					return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("stat jwt privkey %s: %w", vipPrivkeyFn, err)
+				}
+			}
+		}
+
+		signingMethod, jwtPrivkey, _, keyID, err := jwtsvc.ReadPrivateSSHKey(vipPrivkeyFn)
+		if err != nil {
+			return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("read jwt private key: %w", err)
+		}
+
+		opts := jwtsvc.KeydeskTokenOptions{
+			Issuer:        "ministry",
+			Subject:       reserveSubject,
+			Audience:      []string{"ministry", "socket"},
+			SigningMethod:  signingMethod,
+			VipURL:        vipEndpoint,
+		}
+
+		cfg.jwtIssuer = jwtsvc.NewKeydeskTokenIssuer(jwtPrivkey, keyID, opts)
+	}
+
 	if flag.NArg() != 3 {
-		return nil, uuid.Nil, "", false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
+		return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("args: %w", errInvalidArgs)
 	}
 
 	tokenRaw := flag.Arg(0)
@@ -222,20 +240,20 @@ func parseArgs() ([]byte, uuid.UUID, string, bool, bool, bool, error) {
 
 	n, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(tokenRaw))
 	if err != nil {
-		return nil, uuid.Nil, "", false, false, false, fmt.Errorf("token: %w", err)
+		return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("token: %w", err)
 	}
 
 	token = token[:n]
 
 	brigadeID, err := uuid.Parse(flag.Arg(1))
 	if err != nil {
-		return nil, uuid.Nil, "", false, false, false, fmt.Errorf("brigade_id: %w", err)
+		return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("brigade_id: %w", err)
 	}
 
 	userIdentity := flag.Arg(2)
 	if userIdentity == "" {
-		return nil, uuid.Nil, "", false, false, false, fmt.Errorf("user_identity: %w", errInvalidArgs)
+		return nil, uuid.Nil, "", false, false, cfg, fmt.Errorf("user_identity: %w", errInvalidArgs)
 	}
 
-	return token, brigadeID, userIdentity, *chunked, *jout, *mock, nil
+	return token, brigadeID, userIdentity, *chunked, *jout, cfg, nil
 }

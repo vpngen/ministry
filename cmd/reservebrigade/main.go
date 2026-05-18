@@ -106,6 +106,7 @@ func main() {
 		}
 
 		vipURL := fmt.Sprintf("https://%s/partner_api/reserve", cfg.vipEndpoint)
+		fmt.Fprintf(os.Stderr, "%s: VIP Endpoint: %s\n", LogTag, vipURL)
 
 		vipReq, err := http.NewRequestWithContext(ctx, http.MethodPost, vipURL, bytes.NewReader(payload))
 		if err != nil {

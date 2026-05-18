@@ -180,11 +180,11 @@ func fetchPaidUsers(c *http.Client, obfsUUID uuid.UUID, ep string) (map[uuid.UUI
 
 	var userList PaidUsersPesponse
 	if err := json.Unmarshal(payload, &userList); err != nil {
-		return nil, nil, fmt.Errorf("unmarshal response body: %w", err)
+		return nil, payload, fmt.Errorf("unmarshal response body: %w", err)
 	}
 
 	if userList.Result != "success" {
-		return nil, nil, fmt.Errorf("%w: %s", ErrInvalidResponse, userList.Result)
+		return nil, payload, fmt.Errorf("%w: %s", ErrInvalidResponse, userList.Result)
 	}
 
 	brigades := make(map[uuid.UUID]VipBrigade, 0)

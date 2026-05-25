@@ -21,4 +21,5 @@ type VIPAnswer struct {
 	Answer
 	TelegramID int64     `json:"telegram_id,omitempty"`
 	RequestID  uuid.UUID `json:"request_id,omitempty"`
+	Lang       string    `json:"lang,omitempty"`
 }

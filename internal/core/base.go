@@ -315,15 +315,16 @@ func CreateBrigade(ctx context.Context, db *pgxpool.Pool,
 
 const sqlStoreTGID = `
 	INSERT INTO
-		head.vip_telegram_ids (brigade_id, telegram_id)
+		head.vip_telegram_ids (brigade_id, telegram_id, lang)
 	VALUES
-		($1, $2)
+		($1, $2, $3)
 	ON CONFLICT (brigade_id) DO UPDATE
-		SET telegram_id = EXCLUDED.telegram_id
+		SET telegram_id = EXCLUDED.telegram_id,
+		    lang = EXCLUDED.lang
 	`
 
-func storeVIPTelegramID(ctx context.Context, tx pgx.Tx, id uuid.UUID, tgID int64) error {
-	if _, err := tx.Exec(ctx, sqlStoreTGID, id, tgID); err != nil {
+func storeVIPTelegramID(ctx context.Context, tx pgx.Tx, id uuid.UUID, tgID int64, lang string) error {
+	if _, err := tx.Exec(ctx, sqlStoreTGID, id, tgID, lang); err != nil {
 		return fmt.Errorf("store vip telegram id: %w", err)
 	}
 
@@ -380,7 +381,7 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 	partnerID uuid.UUID, creationInfo string,
 	forcePerson *namesgenerator.Person, customName string,
 	label string, labelID string, firstVisit int64,
-	tgID int64,
+	tgID int64, lang string,
 ) (uuid.UUID, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -416,7 +417,7 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 
-	if err := storeVIPTelegramID(ctx, tx, id, tgID); err != nil {
+	if err := storeVIPTelegramID(ctx, tx, id, tgID, lang); err != nil {
 		return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
 	}
 
@@ -432,7 +433,7 @@ func RequestVIPBrigade2(ctx context.Context, db *pgxpool.Pool,
 	partnerID uuid.UUID, creationInfo string,
 	forcePerson *namesgenerator.Person, customName string,
 	label string, labelID string, firstVisit int64,
-	tgID int64, brigadeID uuid.UUID,
+	tgID int64, brigadeID uuid.UUID, lang string,
 ) (uuid.UUID, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -468,7 +469,7 @@ func RequestVIPBrigade2(ctx context.Context, db *pgxpool.Pool,
 		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 
-	if err := storeVIPTelegramID(ctx, tx, brigadeID, tgID); err != nil {
+	if err := storeVIPTelegramID(ctx, tx, brigadeID, tgID, lang); err != nil {
 		return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
 	}
 

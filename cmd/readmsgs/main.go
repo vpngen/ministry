@@ -92,11 +92,12 @@ func main() {
 }
 
 const sqlGetMessage = `
-SELECT 
+SELECT
 	vm.brigade_id,
 	vt.telegram_id,
+	vt.lang,
 	vm.vpnconfig
-FROM 
+FROM
 	head.vip_messages vm
 JOIN
 	head.vip_telegram_ids vt ON vm.brigade_id = vt.brigade_id
@@ -133,10 +134,11 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 		msg       ministry.Answer
 		payload   string
 		tgID      int64
+		lang      string
 		brigadeID uuid.UUID
 	)
 
-	if err := tx.QueryRow(ctx, sqlGetMessage, partnerID).Scan(&brigadeID, &tgID, &payload); err != nil {
+	if err := tx.QueryRow(ctx, sqlGetMessage, partnerID).Scan(&brigadeID, &tgID, &lang, &payload); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -161,6 +163,7 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 		Answer:     msg,
 		TelegramID: tgID,
 		RequestID:  outUUID,
+		Lang:       lang,
 	}
 
 	return answ, nil

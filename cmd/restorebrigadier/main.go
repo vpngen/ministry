@@ -106,7 +106,7 @@ func main() {
 		if mock {
 			vpnconf, err = core.MockComposeBrigade(LogTag, brigadeID)
 		} else {
-			vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, name, person)
+			vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, false, brigadeID, name, person)
 		}
 		if err != nil {
 			fatal(w, jout, "%s: Can't bless brigade: %s\n", LogTag, err)

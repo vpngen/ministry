@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/netip"
 	"os"
 	"time"
 
@@ -88,15 +87,7 @@ func main() {
 
 	ctx := context.Background()
 
-	var partnerID uuid.UUID
-	var ok bool
-
-	if mock {
-		partnerID, ok, err = checkTokenOrMock(ctx, db, schema, token)
-	} else {
-		partnerID, ok, err = checkToken(ctx, db, schema, token)
-	}
-
+	partnerID, ok, err := checkToken(ctx, db, schema, token)
 	if err != nil || !ok {
 		if err != nil {
 			fatal(w, jout, "%s: Can't check token: %s\n", LogTag, err)
@@ -115,20 +106,7 @@ func main() {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
 	}
 
-	var vpnconf *dcmgmt.Answer
-
-	if mock {
-		// MOCK_REALM_ADDR is the host:port of the staging dc-mgmt server.
-		// If unset, ComposeBrigadeMock falls back to a static mock config.
-		var mockRealmAddr netip.AddrPort
-		if s := os.Getenv("MOCK_REALM_ADDR"); s != "" {
-			mockRealmAddr, _ = netip.ParseAddrPort(s)
-		}
-
-		vpnconf, err = core.ComposeBrigadeMock(ctx, db, sshconf, LogTag, brigadeID, fullname, person, mockRealmAddr)
-	} else {
-		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
-	}
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, mock, brigadeID, fullname, person)
 
 	if err != nil {
 		fatal(w, jout, "%s: Can't compose brigade: %s\n", LogTag, err)

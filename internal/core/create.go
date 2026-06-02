@@ -67,7 +67,7 @@ func MockComposeBrigade(tag string, brigadeID uuid.UUID) (*dcmgmt.Answer, error)
 
 func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 	sshconf *ssh.ClientConfig, tag string,
-	vip bool, brigadeID uuid.UUID,
+	vip bool, mock bool, brigadeID uuid.UUID,
 	fullname string, person *namesgenerator.Person,
 ) (*dcmgmt.Answer, error) {
 	attempts := 0
@@ -82,7 +82,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 			return nil, fmt.Errorf("define realm: %w", err)
 		}
 
-		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, vip, false, brigadeID, fullname, person)
+		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, vip, mock, brigadeID, fullname, person)
 		if err != nil {
 			if errors.Is(err, ErrAttemptLimitExceeded) {
 				continue

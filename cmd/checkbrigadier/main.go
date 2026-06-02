@@ -78,7 +78,7 @@ func main() {
 		return
 	}
 
-	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, name, person)
+	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, false, brigadeID, name, person)
 	if err != nil {
 		log.Fatalf("Can't bless brigade: %s", err)
 	}

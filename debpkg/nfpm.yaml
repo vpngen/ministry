@@ -62,6 +62,18 @@ contents:
     mode: 0005
     owner: root
     group: root
+- src: bin/ckfree
+  dst: /opt/vg-head-vpnapi/ckfree
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/readpush
+  dst: /opt/vg-head-vpnapi/readpush
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
 - src: bin/reqvipid
   dst: /opt/vg-head-vpnapi/reqvipid
   file_info:
@@ -246,6 +258,18 @@ contents:
     group: root
 - src: ministry/systemd/vg-ckvip.service
   dst: /etc/systemd/system/vg-ckvip.service
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckfree.timer
+  dst: /etc/systemd/system/vg-ckfree.timer
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckfree.service
+  dst: /etc/systemd/system/vg-ckfree.service
   file_info:
     mode: 0644
     owner: root

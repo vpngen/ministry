@@ -82,7 +82,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 			return nil, fmt.Errorf("define realm: %w", err)
 		}
 
-		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, vip, brigadeID, fullname, person)
+		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, vip, false, brigadeID, fullname, person)
 		if err != nil {
 			if errors.Is(err, ErrAttemptLimitExceeded) {
 				continue
@@ -104,7 +104,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 }
 
 func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag string,
-	realmID uuid.UUID, addr netip.AddrPort, vip bool,
+	realmID uuid.UUID, addr netip.AddrPort, vip bool, mock bool,
 	brigadeUUID uuid.UUID, fullname string, person *namesgenerator.Person,
 ) (*dcmgmt.Answer, error) {
 	fullnameEncoded := base64.StdEncoding.WithPadding(base64.StdPadding).EncodeToString([]byte(fullname))
@@ -124,6 +124,10 @@ func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag str
 
 	if vip {
 		cmd += " -vip"
+	}
+
+	if mock {
+		cmd += " -mock"
 	}
 
 	fmt.Fprintf(os.Stderr, "%s: %s#%s -> %s\n", tag, sshconf.User, addr, cmd)

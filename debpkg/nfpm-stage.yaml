@@ -50,6 +50,14 @@ contents:
     owner: vg_head_vpnapi
     group: vg_head_vpnapi
 
+- src: ministry/debpkg/src/ckfree-stage.env
+  dst: /etc/vgdept/ckfree.env
+  type: config
+  file_info:
+    mode: 0440
+    owner: vg_head_vpnapi
+    group: vg_head_vpnapi
+
 - dst: /opt/vg-head-vpnapi
   type: dir
   file_info:
@@ -70,6 +78,18 @@ contents:
     group: root
 - src: bin/readmsgs
   dst: /opt/vg-head-vpnapi/readmsgs
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/ckfree
+  dst: /opt/vg-head-vpnapi/ckfree
+  file_info:
+    mode: 0005
+    owner: root
+    group: root
+- src: bin/readpush
+  dst: /opt/vg-head-vpnapi/readpush
   file_info:
     mode: 0005
     owner: root
@@ -258,6 +278,18 @@ contents:
     group: root
 - src: ministry/systemd/vg-ckvip.service
   dst: /etc/systemd/system/vg-ckvip.service
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckfree.timer
+  dst: /etc/systemd/system/vg-ckfree.timer
+  file_info:
+    mode: 0644
+    owner: root
+    group: root
+- src: ministry/systemd/vg-ckfree.service
+  dst: /etc/systemd/system/vg-ckfree.service
   file_info:
     mode: 0644
     owner: root

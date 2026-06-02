@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"os"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/vpngen/ministry/internal/pgsql"
 	sshVng "github.com/vpngen/ministry/internal/ssh"
 	"github.com/vpngen/wordsgens/namesgenerator"
-	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -69,17 +69,16 @@ func main() {
 		fatal(w, jout, "%s: Can't read db config: %s\n", LogTag, err)
 	}
 
-	var sshconf *ssh.ClientConfig
-	if !mock {
-		sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
-		if err != nil {
-			fatal(w, jout, "%s: Can't find ssh key: %s\n", LogTag, err)
-		}
+	// SSH is needed in both normal and mock modes: mock mode calls dc-mgmt
+	// with -mock so it can seed its own prerequisites.
+	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
+	if err != nil {
+		fatal(w, jout, "%s: Can't find ssh key: %s\n", LogTag, err)
+	}
 
-		sshconf, err = sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
-		if err != nil {
-			fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
-		}
+	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
 	}
 
 	db, err := pgsql.CreateDBPool(dbURL)
@@ -89,7 +88,15 @@ func main() {
 
 	ctx := context.Background()
 
-	partnerID, ok, err := checkToken(ctx, db, schema, token)
+	var partnerID uuid.UUID
+	var ok bool
+
+	if mock {
+		partnerID, ok, err = checkTokenOrMock(ctx, db, schema, token)
+	} else {
+		partnerID, ok, err = checkToken(ctx, db, schema, token)
+	}
+
 	if err != nil || !ok {
 		if err != nil {
 			fatal(w, jout, "%s: Can't check token: %s\n", LogTag, err)
@@ -111,7 +118,14 @@ func main() {
 	var vpnconf *dcmgmt.Answer
 
 	if mock {
-		vpnconf, err = core.MockComposeBrigade(LogTag, brigadeID)
+		// MOCK_REALM_ADDR is the host:port of the staging dc-mgmt server.
+		// If unset, ComposeBrigadeMock falls back to a static mock config.
+		var mockRealmAddr netip.AddrPort
+		if s := os.Getenv("MOCK_REALM_ADDR"); s != "" {
+			mockRealmAddr, _ = netip.ParseAddrPort(s)
+		}
+
+		vpnconf, err = core.ComposeBrigadeMock(ctx, db, sshconf, LogTag, brigadeID, fullname, person, mockRealmAddr)
 	} else {
 		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, false, brigadeID, fullname, person)
 	}

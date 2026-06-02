@@ -1,0 +1,10 @@
+[Unit]
+Description=Check free brigades and queue push notifications
+Requires=vg-ckfree.service
+
+[Timer]
+Unit=vg-ckfree.service
+OnCalendar=*-*-* *:00:00
+
+[Install]
+WantedBy=timers.target

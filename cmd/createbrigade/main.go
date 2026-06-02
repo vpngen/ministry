@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/keydesk/keydesk"
 	"github.com/vpngen/ministry"
@@ -50,7 +51,7 @@ var (
 func main() {
 	var w io.WriteCloser
 
-	person, fullname, chunked, jout, token, label, labelID, fv, mock, err := parseArgs()
+	person, fullname, chunked, jout, token, label, labelID, fv, mock, tgid, lang, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -104,6 +105,12 @@ func main() {
 	brigadeID, mnemo, fullname, person, err = core.CreateBrigade(ctx, db, seedExtra, partnerID, brigadeCreationType, person, fullname, label, labelID, fv)
 	if err != nil {
 		fatal(w, jout, "%s: Can't create brigade: %s\n", LogTag, err)
+	}
+
+	if tgid != 0 {
+		if err := upsertFreeTelegramID(ctx, db, schema, brigadeID, tgid, lang); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: upsert free_telegram_ids: %s\n", LogTag, err)
+		}
 	}
 
 	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, mock, brigadeID, fullname, person)
@@ -187,6 +194,16 @@ func main() {
 	}
 }
 
+func upsertFreeTelegramID(ctx context.Context, db *pgxpool.Pool, schema string, brigadeID uuid.UUID, telegramID int64, lang string) error {
+	_, err := db.Exec(ctx, fmt.Sprintf(`
+		INSERT INTO %s.free_telegram_ids (brigade_id, telegram_id, lang)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (brigade_id) DO UPDATE SET telegram_id = EXCLUDED.telegram_id, lang = EXCLUDED.lang
+	`, schema), brigadeID, telegramID, lang)
+
+	return err
+}
+
 func readDBConfig() (string, string, error) {
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
@@ -201,7 +218,7 @@ func readDBConfig() (string, string, error) {
 	return dbURL, schema, nil
 }
 
-func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, string, int64, bool, error) {
+func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, string, int64, bool, int64, string, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
 	jout := flag.Bool("j", false, "json output")
 	label := flag.String("l", "", "label")
@@ -210,11 +227,13 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 	customName := flag.String("name", "", "custom brigadier fullname")
 	forcePerson := flag.String("p", "", "force person")
 	mock := flag.Bool("mock", false, "mock brigade creation")
+	tgid := flag.Int64("tgid", 0, "telegram user id (obfuscated)")
+	lang := flag.String("lang", "ru", "user language")
 
 	flag.Parse()
 
 	if *label != "" && len(*label) > maxStartLabelLen {
-		return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("label: %w", ErrLabelTooLong)
+		return nil, "", false, false, nil, "", "", 0, false, 0, "", fmt.Errorf("label: %w", ErrLabelTooLong)
 	}
 
 	id := *labelID
@@ -229,24 +248,24 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
+		return nil, "", false, false, nil, "", "", 0, false, 0, "", fmt.Errorf("access token: %w", ErrEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	_, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0]))
 	if err != nil {
-		return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("access token: %w", err)
+		return nil, "", false, false, nil, "", "", 0, false, 0, "", fmt.Errorf("access token: %w", err)
 	}
 
 	var person *namesgenerator.Person
 	if *forcePerson != "" {
 		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*forcePerson)
 		if err != nil {
-			return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("force person: %w", err)
+			return nil, "", false, false, nil, "", "", 0, false, 0, "", fmt.Errorf("force person: %w", err)
 		}
 
 		if err := json.Unmarshal(buf, &person); err != nil {
-			return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("force person: %w", err)
+			return nil, "", false, false, nil, "", "", 0, false, 0, "", fmt.Errorf("force person: %w", err)
 		}
 	}
 
@@ -254,11 +273,11 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 	if *customName != "" {
 		buf, err := base64.StdEncoding.WithPadding(base64.StdPadding).DecodeString(*customName)
 		if err != nil {
-			return nil, "", false, false, nil, "", "", 0, false, fmt.Errorf("custom name: %w", err)
+			return nil, "", false, false, nil, "", "", 0, false, 0, "", fmt.Errorf("custom name: %w", err)
 		}
 
 		fullname = string(buf)
 	}
 
-	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), *mock, nil
+	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), *mock, *tgid, *lang, nil
 }

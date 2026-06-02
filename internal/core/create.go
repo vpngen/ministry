@@ -85,6 +85,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 		vpnconf, err := callRealmAddBrigade(ctx, sshconf, tag, realmID, addr, vip, mock, brigadeID, fullname, person)
 		if err != nil {
 			if errors.Is(err, ErrAttemptLimitExceeded) {
+				fmt.Fprintf(os.Stderr, "%s: realm %s (%s) unreachable, retrying\n", tag, realmID, addr)
 				continue
 			}
 
@@ -92,6 +93,7 @@ func ComposeBrigade(ctx context.Context, db *pgxpool.Pool,
 		}
 
 		if vpnconf.Status != keydesk.AnswerStatusSuccess {
+			fmt.Fprintf(os.Stderr, "%s: realm %s (%s) returned non-success status: %s, retrying\n", tag, realmID, addr, vpnconf.Status)
 			continue
 		}
 
@@ -141,6 +143,7 @@ func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag str
 	for {
 		client, err = ssh.Dial("tcp", addr.String(), sshconf)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s: ssh dial %s attempt %d: %v\n", tag, addr, attempts+1, err)
 			if attempts++; attempts > RealmConnectMaxAttempts {
 				return nil, ErrAttemptLimitExceeded
 			}
@@ -184,6 +187,7 @@ func callRealmAddBrigade(ctx context.Context, sshconf *ssh.ClientConfig, tag str
 	}()
 
 	if err := session.Run(cmd); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: ssh run stdout: %s\n", tag, b.String())
 		return nil, fmt.Errorf("ssh run: %w", err)
 	}
 

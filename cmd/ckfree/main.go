@@ -74,7 +74,7 @@ func main() {
 
 	steps := []step{
 		{
-			cmd:       fmt.Sprintf("getwasted notvisited -d %d -n %d%s", notActivatedDays, maxResultRows, mockSuffix),
+			cmd:       fmt.Sprintf("getwasted notvisited -d %d -n %d%s", notActivatedHours, maxResultRows, mockSuffix),
 			eventType: EventNotActivated,
 		},
 		{

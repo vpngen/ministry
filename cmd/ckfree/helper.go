@@ -18,10 +18,10 @@ import (
 )
 
 const (
-	notActivatedHours = 1
+	notActivatedHours = 12
 	lowUsers1dDays    = 1
-	lowUsers3dDays    = 1
-	lastChanceDays    = 1 // deletion happens at 7 days, so 6 = 1 day before
+	lowUsers3dDays    = 3
+	lastChanceDays    = 6 // deletion happens at 7 days, so 6 = 1 day before
 	minActiveUsers    = 10
 	maxResultRows     = 10000
 )

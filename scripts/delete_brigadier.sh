@@ -335,3 +335,22 @@ if [ -n "${num}" ]; then
                 *) echo "[+]         ${num} slots rest" ;;
         esac
 fi
+
+if [ "${REASON}" = "never_visited" ] || [ "${REASON}" = "inactive" ]; then
+        psql -d "${DBNAME}" -q -t -A \
+                --set ON_ERROR_STOP=yes \
+                --set brigade_id="${bid}" <<EOF
+        INSERT INTO head.push_messages (brigade_id, event_type)
+        SELECT ft.brigade_id, 'free.brigade_deleted'
+        FROM head.free_telegram_ids ft
+        LEFT JOIN head.brigadier_vip bv ON ft.brigade_id = bv.brigade_id
+                AND bv.vip_expire > (NOW() AT TIME ZONE 'UTC')
+        WHERE ft.brigade_id = :'brigade_id'::uuid
+          AND bv.brigade_id IS NULL
+        ON CONFLICT (brigade_id, event_type) DO NOTHING;
+EOF
+        rc=$?
+        if [ $rc -ne 0 ]; then
+                echo "[-] Something wrong with queuing push notification: $rc"
+        fi
+fi

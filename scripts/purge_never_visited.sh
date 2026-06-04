@@ -6,7 +6,7 @@ SCHEMA=${SCHEMA:-"head"}
 USERNAME=${USERNAME:-"_valera_"}
 REASON="never_visited"
 
-DAYS=${DAYS:-"1"}
+HOURS=${HOURS:-"24"}
 NUMS=${NUMS:-"100"}
 
 if [ -z "${SSH_KEY}" ]; then
@@ -34,7 +34,7 @@ if [ -s "${VIP_BRIGADES_FILE_ETC}" ]; then
         VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_ETC}"
 fi
 
-CMD="getwasted notvisited -d ${DAYS} -n ${NUMS}"
+CMD="getwasted notvisited -d ${HOURS} -n ${NUMS}"
 echo "GET WASTED: ${CMD}"
 
 purge_per_realm () {

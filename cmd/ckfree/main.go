@@ -78,15 +78,15 @@ func main() {
 			eventType: EventNotActivated,
 		},
 		{
-			cmd:       fmt.Sprintf("getwasted inactive -x %d -d %d -n %d%s", minActiveUsers, lowUsers1dDays, maxResultRows, mockSuffix),
+			cmd:       fmt.Sprintf("getwasted inactive -x %d -d %d -D -n %d%s", minActiveUsers, lowUsers1dDays, maxResultRows, mockSuffix),
 			eventType: EventLowUsers1d,
 		},
 		{
-			cmd:       fmt.Sprintf("getwasted inactive -x %d -d %d -n %d%s", minActiveUsers, lowUsers3dDays, maxResultRows, mockSuffix),
+			cmd:       fmt.Sprintf("getwasted inactive -x %d -d %d -D -n %d%s", minActiveUsers, lowUsers3dDays, maxResultRows, mockSuffix),
 			eventType: EventLowUsers3d,
 		},
 		{
-			cmd:       fmt.Sprintf("getwasted inactive -x %d -d %d -n %d%s", minActiveUsers, lastChanceDays, maxResultRows, mockSuffix),
+			cmd:       fmt.Sprintf("getwasted inactive -x %d -d %d -D -n %d%s", minActiveUsers, lastChanceDays, maxResultRows, mockSuffix),
 			eventType: EventLastChance,
 		},
 	}

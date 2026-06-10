@@ -8,5 +8,6 @@ vendor
 history.txt
 pkg/
 DOCUMENTATION.md
+ENVIRONMENT.md
 .DS_Store
 .claude/

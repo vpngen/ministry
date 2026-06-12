@@ -11,6 +11,21 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+const sqlQueueSubscriptionExpired = `
+INSERT INTO head.push_messages (brigade_id, event_type)
+VALUES ($1, 'vip.subscription_expired')
+ON CONFLICT (brigade_id, event_type) DO NOTHING
+`
+
+func queueSubscriptionExpired(ctx context.Context, db *pgxpool.Pool, brigadeID uuid.UUID) error {
+	_, err := db.Exec(ctx, sqlQueueSubscriptionExpired, brigadeID)
+	if err != nil {
+		return fmt.Errorf("exec: %w", err)
+	}
+
+	return nil
+}
+
 const sqlBrigadesToUnVIParize = `
 SELECT 
 	b.brigade_id
@@ -83,6 +98,10 @@ func unviparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig
 			fmt.Fprintf(os.Stderr, "%s: Can't set finalizer: %s\n", LogTag, err)
 
 			continue
+		}
+
+		if err := queueSubscriptionExpired(ctx, db, brigadeID); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: Can't queue subscription_expired notification for %s: %s\n", LogTag, brigadeID, err)
 		}
 
 		fmt.Fprintf(os.Stderr, "%s: Brigade %s VIP unset\n", LogTag, brigadeID)

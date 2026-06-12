@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/vpngen/ministry"
 	"github.com/vpngen/ministry/internal/pgsql"
 )
 
@@ -28,13 +27,22 @@ const (
 var (
 	ErrEmptyAccessToken = errors.New("token not specified")
 	ErrInvalidUUID      = errors.New("invalid uuid")
+	ErrEventRequired    = errors.New("event type required when using -id")
 	ErrPartnerMismatch  = errors.New("partner mismatch")
 )
+
+// PushAnswer is the response returned for each pending VIP notification.
+type PushAnswer struct {
+	TelegramID int64     `json:"telegram_id"`
+	RequestID  uuid.UUID `json:"request_id"`
+	EventType  string    `json:"event_type"`
+	Lang       string    `json:"lang"`
+}
 
 func main() {
 	var w io.WriteCloser
 
-	chunked, token, inUUID, err := parseArgs()
+	chunked, token, requestID, eventType, err := parseArgs()
 	if err != nil {
 		log.Fatalf("%s: Can't parse args: %s\n", LogTag, err)
 	}
@@ -68,17 +76,18 @@ func main() {
 		fatal(w, "%s: Access denied\n", LogTag)
 	}
 
-	if inUUID != uuid.Nil {
-		if err := doneMessage(ctx, db, partnerID, inUUID, obfsUUID); err != nil {
-			fatal(w, "%s: Can't mark message as done: %s\n", LogTag, err)
+	// -id + -event: mark a previously fetched notification as sent.
+	if requestID != uuid.Nil {
+		if err := doneNotification(ctx, db, partnerID, requestID, eventType, obfsUUID); err != nil {
+			fatal(w, "%s: Can't mark notification as done: %s\n", LogTag, err)
 		}
 
 		return
 	}
 
-	answ, err := getMessage(ctx, db, partnerID, obfsUUID)
+	answ, err := getNotification(ctx, db, partnerID, obfsUUID)
 	if err != nil {
-		fatal(w, "%s: Can't get message: %s\n", LogTag, err)
+		fatal(w, "%s: Can't get notification: %s\n", LogTag, err)
 	}
 
 	payload, err := json.MarshalIndent(answ, "", "  ")
@@ -91,38 +100,41 @@ func main() {
 	}
 }
 
-const sqlGetMessage = `
+// sqlGetNotification fetches the oldest unsent VIP push notification for brigades
+// belonging to the given partner, joining vip_telegram_ids for Telegram contact info.
+const sqlGetNotification = `
 SELECT
-	vm.brigade_id,
+	pm.brigade_id,
 	vt.telegram_id,
 	vt.lang,
-	vm.vpnconfig
+	pm.event_type
 FROM
-	head.vip_messages vm
+	head.push_messages pm
 JOIN
-	head.vip_telegram_ids vt ON vm.brigade_id = vt.brigade_id
+	head.vip_telegram_ids vt ON pm.brigade_id = vt.brigade_id
 JOIN
-	head.brigadier_partners bp ON bp.brigade_id = vm.brigade_id
+	head.brigadier_partners bp ON bp.brigade_id = pm.brigade_id
 WHERE
 	bp.partner_id = $1
-	AND vm.finalizer = true
-	AND vm.vpnconfig != ''
-	AND vm.last_try < NOW() AT TIME ZONE 'UTC' - INTERVAL '2 MINUTES'
+	AND pm.sent_at IS NULL
+	AND pm.event_type LIKE 'vip.%'
+	AND pm.last_try < NOW() AT TIME ZONE 'UTC' - INTERVAL '2 MINUTES'
 ORDER BY
-	vm.last_try DESC
+	pm.last_try ASC
 LIMIT 1
 `
 
-const sqlUpdateMessage = `
-UPDATE 
-	head.vip_messages
-SET 
+const sqlUpdateLastTry = `
+UPDATE
+	head.push_messages
+SET
 	last_try = NOW() AT TIME ZONE 'UTC'
-WHERE 
+WHERE
 	brigade_id = $1
+	AND event_type = $2
 `
 
-func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.UUID) (*ministry.VIPAnswer, error) {
+func getNotification(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.UUID) (*PushAnswer, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -131,14 +143,13 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 	defer tx.Rollback(ctx)
 
 	var (
-		msg       ministry.Answer
-		payload   string
+		brigadeID uuid.UUID
 		tgID      int64
 		lang      string
-		brigadeID uuid.UUID
+		eventType string
 	)
 
-	if err := tx.QueryRow(ctx, sqlGetMessage, partnerID).Scan(&brigadeID, &tgID, &lang, &payload); err != nil {
+	if err := tx.QueryRow(ctx, sqlGetNotification, partnerID).Scan(&brigadeID, &tgID, &lang, &eventType); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -146,39 +157,40 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 		return nil, fmt.Errorf("query row: %w", err)
 	}
 
-	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-		return nil, fmt.Errorf("unmarshal payload: %w", err)
+	if _, err := tx.Exec(ctx, sqlUpdateLastTry, brigadeID, eventType); err != nil {
+		return nil, fmt.Errorf("update last_try: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, sqlUpdateMessage, brigadeID); err != nil {
-		return nil, fmt.Errorf("update message: %w", err)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 
-	var outUUID uuid.UUID
+	var requestID uuid.UUID
 	for i := range 16 {
-		outUUID[i] = brigadeID[i] ^ obfsUUID[i]
+		requestID[i] = brigadeID[i] ^ obfsUUID[i]
 	}
 
-	answ := &ministry.VIPAnswer{
-		Answer:     msg,
+	return &PushAnswer{
 		TelegramID: tgID,
-		RequestID:  outUUID,
+		RequestID:  requestID,
+		EventType:  eventType,
 		Lang:       lang,
-	}
-
-	return answ, nil
+	}, nil
 }
 
-const sqlDoneMessage = `
-DELETE FROM 
-	head.vip_messages
+const sqlMarkSent = `
+UPDATE
+	head.push_messages
+SET
+	sent_at = NOW() AT TIME ZONE 'UTC'
 WHERE
 	brigade_id = $1
+	AND event_type = $2
 `
 
 const sqlGetBrigadePartnerID = `
-SELECT 
-	bp.partner_id	
+SELECT
+	bp.partner_id
 FROM
 	head.brigadier_partners bp
 WHERE
@@ -186,7 +198,7 @@ WHERE
 LIMIT 1
 `
 
-func doneMessage(ctx context.Context, db *pgxpool.Pool, inPartnerID, inUUID, obfsUUID uuid.UUID) error {
+func doneNotification(ctx context.Context, db *pgxpool.Pool, inPartnerID, requestID uuid.UUID, eventType string, obfsUUID uuid.UUID) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -196,20 +208,20 @@ func doneMessage(ctx context.Context, db *pgxpool.Pool, inPartnerID, inUUID, obf
 
 	var brigadeID uuid.UUID
 	for i := range 16 {
-		brigadeID[i] = inUUID[i] ^ obfsUUID[i]
+		brigadeID[i] = requestID[i] ^ obfsUUID[i]
 	}
 
 	var partnerID uuid.UUID
 	if err := tx.QueryRow(ctx, sqlGetBrigadePartnerID, brigadeID).Scan(&partnerID); err != nil {
-		return fmt.Errorf("get brigade partner id: %w", err)
+		return fmt.Errorf("get brigade partner: %w", err)
 	}
 
 	if partnerID != inPartnerID {
-		return fmt.Errorf("%w: %s", ErrPartnerMismatch, inPartnerID.String())
+		return fmt.Errorf("%w: %s", ErrPartnerMismatch, inPartnerID)
 	}
 
-	if _, err := tx.Exec(ctx, sqlDoneMessage, brigadeID); err != nil {
-		return fmt.Errorf("exec: %w", err)
+	if _, err := tx.Exec(ctx, sqlMarkSent, brigadeID, eventType); err != nil {
+		return fmt.Errorf("mark sent: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -238,38 +250,44 @@ func readConfigs() (uuid.UUID, string, error) {
 	return obfsUUID, dbURL, nil
 }
 
-func parseArgs() (bool, []byte, uuid.UUID, error) {
+func parseArgs() (bool, []byte, uuid.UUID, string, error) {
 	chunked := flag.Bool("ch", false, "chunked output")
-	actDone := flag.String("id", "", "action done")
+	actDone := flag.String("id", "", "mark notification as sent (obfuscated brigade id)")
+	eventType := flag.String("event", "", "event type, required with -id")
 
 	flag.Parse()
 
 	a := flag.Args()
 	if len(a) < 1 {
-		return false, nil, uuid.Nil, fmt.Errorf("access token: %w", ErrEmptyAccessToken)
+		return false, nil, uuid.Nil, "", fmt.Errorf("access token: %w", ErrEmptyAccessToken)
 	}
 
 	token := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(len(a[0])))
 	if _, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(token, []byte(a[0])); err != nil {
-		return false, nil, uuid.Nil, fmt.Errorf("access token: %w", err)
+		return false, nil, uuid.Nil, "", fmt.Errorf("access token: %w", err)
 	}
 
 	if *actDone == "" {
-		return *chunked, token, uuid.Nil, nil
+		return *chunked, token, uuid.Nil, "", nil
 	}
 
-	var inUUID uuid.UUID
-	inUUID, err := uuid.Parse(*actDone)
+	if *eventType == "" {
+		return false, nil, uuid.Nil, "", ErrEventRequired
+	}
+
+	requestID, err := uuid.Parse(*actDone)
 	if err != nil {
 		buf, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(*actDone)
 		if err != nil {
-			return false, nil, uuid.Nil, fmt.Errorf("action done: %w:%s", ErrInvalidUUID, err.Error())
+			return false, nil, uuid.Nil, "", fmt.Errorf("action done: %w: %s", ErrInvalidUUID, err)
 		}
 
 		if len(buf) != 16 {
-			return false, nil, uuid.Nil, fmt.Errorf("action done: %w", ErrInvalidUUID)
+			return false, nil, uuid.Nil, "", fmt.Errorf("action done: %w", ErrInvalidUUID)
 		}
+
+		copy(requestID[:], buf)
 	}
 
-	return *chunked, token, inUUID, nil
+	return *chunked, token, requestID, *eventType, nil
 }

@@ -79,6 +79,8 @@ cleanInstall() {
 	systemctl start vg-sync-ids.timer ||:
         systemctl enable vg-ckvip.timer ||:
         systemctl start vg-ckvip.timer ||:
+        systemctl enable vg-ckvip-push.timer ||:
+        systemctl start vg-ckvip-push.timer ||:
 }
 
 upgrade() {
@@ -92,6 +94,8 @@ upgrade() {
 	systemctl start vg-sync-ids.timer ||:
         systemctl enable vg-ckvip.timer ||:
         systemctl start vg-ckvip.timer ||:
+        systemctl enable vg-ckvip-push.timer ||:
+        systemctl start vg-ckvip-push.timer ||:
 }
 
 # Step 2, check if this is a clean install or an upgrade

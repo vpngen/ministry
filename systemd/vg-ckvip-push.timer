@@ -1,0 +1,10 @@
+[Unit]
+Description=Check VIP brigades and queue push notifications
+Requires=vg-ckvip-push.service
+
+[Timer]
+Unit=vg-ckvip-push.service
+OnCalendar=*-*-* *:00:00
+
+[Install]
+WantedBy=timers.target

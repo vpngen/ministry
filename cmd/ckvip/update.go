@@ -38,11 +38,18 @@ ON CONFLICT (brigade_id) DO UPDATE
 `
 
 const purgeExpired = `
-DELETE FROM 
-	head.brigadier_vip 
-WHERE 
+DELETE FROM
+	head.brigadier_vip
+WHERE
 	vip_expire < (NOW() AT TIME ZONE 'UTC' - $1 * INTERVAL '7 DAY')
 	AND finalizer = false
+`
+
+const purgeVIPTelegramIDs = `
+DELETE FROM 
+	head.vip_telegram_ids
+WHERE 
+	brigade_id NOT IN (SELECT brigade_id FROM head.brigadier_vip)
 `
 
 const allVipBrigades = `
@@ -54,6 +61,14 @@ JOIN
 	head.brigadier_vip bv ON b.brigade_id = bv.brigade_id
 WHERE
 	bv.vip_expire > (NOW() AT TIME ZONE 'UTC')
+`
+
+const clearRenewalNotifications = `
+DELETE FROM
+	head.push_messages
+WHERE
+	brigade_id = ANY($1)
+	AND event_type IN ('vip.renewal_failed', 'vip.last_chance', 'vip.subscription_expired')
 `
 
 const resetExpired = `
@@ -146,6 +161,23 @@ func updateVIPRecords(ctx context.Context, db *pgxpool.Pool, brigades map[uuid.U
 	// purge expired and deleted VIP records
 	if _, err := tx.Exec(ctx, purgeExpired, redemtionPeriod); err != nil {
 		return fmt.Errorf("purge expired: %w", err)
+	}
+
+	// purge vip telegram IDs for brigades that no longer have a VIP record
+	if _, err := tx.Exec(ctx, purgeVIPTelegramIDs); err != nil {
+		return fmt.Errorf("purge vip telegram ids: %w", err)
+	}
+
+	// clear stale renewal/expiry push notifications for brigades that just renewed
+	activeIDs := make([]uuid.UUID, 0, len(brigades))
+	for id := range brigades {
+		activeIDs = append(activeIDs, id)
+	}
+
+	if len(activeIDs) > 0 {
+		if _, err := tx.Exec(ctx, clearRenewalNotifications, activeIDs); err != nil {
+			return fmt.Errorf("clear renewal notifications: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

@@ -10,6 +10,8 @@ go build -C ministry/cmd/reqvipid -o ../../../bin/reqvipid
 go build -C ministry/cmd/readmsgs -o ../../../bin/readmsgs
 go build -C ministry/cmd/ckfree -o ../../../bin/ckfree
 go build -C ministry/cmd/readpush -o ../../../bin/readpush
+go build -C ministry/cmd/readpushvip -o ../../../bin/readpushvip
+go build -C ministry/cmd/ckvip-push -o ../../../bin/ckvip-push
 go build -C ministry/cmd/createbrigade -o ../../../bin/createbrigade
 go build -C ministry/cmd/restorebrigadier -o ../../../bin/restorebrigadier
 go build -C ministry/cmd/syncstats -o ../../../bin/syncstats

@@ -1,0 +1,14 @@
+[Unit]
+Description=Check VIP brigades and queue push notifications
+Wants=vg-ckvip-push.timer
+
+[Service]
+Type=oneshot
+User=vg_head_vpnapi
+Group=vg_head_vpnapi
+EnvironmentFile=/etc/vgdept/ckvip-push.env
+WorkingDirectory=/home/vg_head_vpnapi
+ExecStart=/opt/vg-head-vpnapi/ckvip-push -s
+
+[Install]
+WantedBy=multi-user.target

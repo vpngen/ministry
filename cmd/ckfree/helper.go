@@ -22,7 +22,7 @@ const (
 	lowUsers1dDays    = 1
 	lowUsers3dDays    = 3
 	lastChanceDays    = 6 // deletion happens at 7 days, so 6 = 1 day before
-	minActiveUsers    = 10
+	minActiveUsers    = 5
 	maxResultRows     = 10000
 )
 

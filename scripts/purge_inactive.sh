@@ -27,7 +27,7 @@ fi
 
 DAYS=${DAYS:-"7"}
 NUMS=${NUMS:-"100000"}
-MINACTIVE=${MINACTIVE:-"10"}
+MINACTIVE=${MINACTIVE:-"5"}
 
 VIP_BRIGADES_FILE_HOME="${HOME}/.vip_brigades_files"
 if [ -s "${VIP_BRIGADES_FILE_HOME}" ]; then

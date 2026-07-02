@@ -442,13 +442,23 @@ func RequestVIPBrigade2(ctx context.Context, db *pgxpool.Pool,
 
 	defer tx.Rollback(ctx)
 
-	// check if tgID already has reserved brigade
+	// check if this brigade_id was already created (e.g. a retry, or a pre-existing brigade)
 	checkID, err := fetchVIPByBrigadeID(ctx, tx, brigadeID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("fetch vip by brigade id: %w", err)
 	}
 
 	if checkID != uuid.Nil {
+		// the brigade already exists, so skip re-creating it, but still make sure
+		// the telegram link is recorded - this upsert is safe to repeat.
+		if err := storeVIPTelegramID(ctx, tx, brigadeID, tgID, lang); err != nil {
+			return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return brigadeID, fmt.Errorf("commit: %w", err)
+		}
+
 		return brigadeID, nil
 	}
 

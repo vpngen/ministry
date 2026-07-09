@@ -28,6 +28,8 @@ if [ "createbrigade" = "${cmd}" ]; then
     "${basedir}"/createbrigade "$@"
 elif [ "restorebrigadier" = "${cmd}" ]; then
     "${basedir}"/restorebrigadier "$@"
+elif [ "checkbrigadier" = "${cmd}" ]; then
+    "${basedir}"/checkbrigadier "$@"
 elif [ "synclabels" = "${cmd}" ]; then
     "${basedir}"/synclabels "$@"
 elif [ "readmsgs" = "${cmd}" ]; then

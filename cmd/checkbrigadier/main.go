@@ -2,13 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http/httputil"
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -32,24 +36,29 @@ const (
 var errInvalidArgs = errors.New("invalid args")
 
 func main() {
-	name, mnemo, chkDel, bless, err := parseArgs()
+	var w io.WriteCloser
+
+	name, mnemo, chunked, jout, chkDel, bless, err := parseArgs()
 	if err != nil {
 		log.Fatalf("Can't parse args: %s\n", err)
 	}
 
-	sshKeyFilename, dbURL, _, err := readConfigs()
-	if err != nil {
-		log.Fatalf("Can't read configs: %s\n", err)
+	switch chunked {
+	case true:
+		w = httputil.NewChunkedWriter(os.Stdout)
+		defer w.Close()
+	default:
+		w = os.Stdout
 	}
 
-	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
+	sshKeyFilename, dbURL, _, err := readConfigs()
 	if err != nil {
-		log.Fatalf("%s: Can't create ssh configs: %s\n", LogTag, err)
+		fatal(w, jout, "Can't read configs: %s\n", err)
 	}
 
 	db, err := pgsql.CreateDBPool(dbURL)
 	if err != nil {
-		log.Fatalf("Can't create db pool: %s\n", err)
+		fatal(w, jout, "Can't create db pool: %s\n", err)
 	}
 
 	ctx := context.Background()
@@ -57,10 +66,21 @@ func main() {
 	brigadeID, person, del, delTime, delReason, _, _, _, err := core.CheckBrigadier(ctx, db, seedExtra, name, mnemo, false)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Fatalf("Invalid mnemonics for brigadier %q\n", name)
+			notFound(w, jout, "Invalid name or words for brigadier %q\n", name)
+
+			return
 		}
 
-		log.Fatalf("Can't find key: %s\n", err)
+		fatal(w, jout, "Can't find key: %s\n", err)
+	}
+
+	// -bless is a manual admin-only operation (recreate a deleted brigade in
+	// place); it's never used by the read-only -j lookup path, so -j always
+	// returns as soon as the brigade is identified, before any bless attempt.
+	if jout {
+		success(w, jout, brigadeID, del)
+
+		return
 	}
 
 	log.Println("SUCCESS")
@@ -78,9 +98,14 @@ func main() {
 		return
 	}
 
+	sshconf, err := sshVng.CreateSSHConfig(sshKeyFilename, sshkeyRemoteUsername, sshVng.SSHDefaultTimeOut)
+	if err != nil {
+		fatal(w, jout, "%s: Can't create ssh configs: %s\n", LogTag, err)
+	}
+
 	vpnconf, err := core.ComposeBrigade(ctx, db, sshconf, LogTag, false, false, brigadeID, name, person)
 	if err != nil {
-		log.Fatalf("Can't bless brigade: %s", err)
+		fatal(w, jout, "Can't bless brigade: %s", err)
 	}
 
 	log.Println("WGCONFIG:")
@@ -111,15 +136,32 @@ func readConfigs() (string, string, string, error) {
 	return sshKeyFilename, dbURL, brigadesSchema, nil
 }
 
-func parseArgs() (string, string, bool, bool, error) {
+func parseArgs() (string, string, bool, bool, bool, bool, error) {
+	chunked := flag.Bool("ch", false, "chunked output")
+	jsonOut := flag.Bool("j", false, "json output")
 	checkDel := flag.Bool("chkdel", false, "Check deletion status")
 	recreate := flag.Bool("bless", false, "Recreate brigade")
 
 	flag.Parse()
 
 	if flag.NArg() != 2 {
-		return "", "", false, false, fmt.Errorf("args: %w", errInvalidArgs)
+		return "", "", false, false, false, false, fmt.Errorf("args: %w", errInvalidArgs)
 	}
 
-	return strings.Join(strings.Fields(flag.Arg(0)), " "), strings.Join(strings.Fields(flag.Arg(1)), " "), *checkDel, *recreate, nil
+	// implicit base64 decoding, matching restorebrigadier's arg convention
+
+	name := flag.Arg(0)
+	if buf, err := base64.StdEncoding.DecodeString(name); err == nil && utf8.Valid(buf) {
+		name = string(buf)
+	}
+
+	mnemo := flag.Arg(1)
+	if buf, err := base64.StdEncoding.DecodeString(mnemo); err == nil && utf8.Valid(buf) {
+		mnemo = string(buf)
+	}
+
+	name = strings.Join(strings.Fields(strings.Replace(name, ",", " ", -1)), " ")
+	mnemo = strings.Join(strings.Fields(strings.Replace(mnemo, ",", " ", -1)), " ")
+
+	return name, mnemo, *chunked, *jsonOut, *checkDel, *recreate, nil
 }

@@ -96,7 +96,8 @@ SELECT
 	vm.brigade_id,
 	vt.telegram_id,
 	vt.lang,
-	vm.vpnconfig
+	vm.vpnconfig,
+	vm.vip_upgrade_notify
 FROM
 	head.vip_messages vm
 JOIN
@@ -106,7 +107,7 @@ JOIN
 WHERE
 	bp.partner_id = $1
 	AND vm.finalizer = true
-	AND vm.vpnconfig != ''
+	AND (vm.vpnconfig != '' OR vm.vip_upgrade_notify = true)
 	AND vm.last_try < NOW() AT TIME ZONE 'UTC' - INTERVAL '2 MINUTES'
 ORDER BY
 	vm.last_try DESC
@@ -131,14 +132,15 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 	defer tx.Rollback(ctx)
 
 	var (
-		msg       ministry.Answer
-		payload   string
-		tgID      int64
-		lang      string
-		brigadeID uuid.UUID
+		msg              ministry.Answer
+		payload          string
+		tgID             int64
+		lang             string
+		brigadeID        uuid.UUID
+		vipUpgradeNotify bool
 	)
 
-	if err := tx.QueryRow(ctx, sqlGetMessage, partnerID).Scan(&brigadeID, &tgID, &lang, &payload); err != nil {
+	if err := tx.QueryRow(ctx, sqlGetMessage, partnerID).Scan(&brigadeID, &tgID, &lang, &payload, &vipUpgradeNotify); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -146,8 +148,12 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 		return nil, fmt.Errorf("query row: %w", err)
 	}
 
-	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-		return nil, fmt.Errorf("unmarshal payload: %w", err)
+	// a vip_upgrade_notify message carries no vpnconfig - nothing changed about
+	// the brigade's connection, so there's nothing to unmarshal.
+	if !vipUpgradeNotify {
+		if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+			return nil, fmt.Errorf("unmarshal payload: %w", err)
+		}
 	}
 
 	if _, err := tx.Exec(ctx, sqlUpdateMessage, brigadeID); err != nil {
@@ -160,10 +166,11 @@ func getMessage(ctx context.Context, db *pgxpool.Pool, partnerID, obfsUUID uuid.
 	}
 
 	answ := &ministry.VIPAnswer{
-		Answer:     msg,
-		TelegramID: tgID,
-		RequestID:  outUUID,
-		Lang:       lang,
+		Answer:           msg,
+		TelegramID:       tgID,
+		RequestID:        outUUID,
+		Lang:             lang,
+		VIPUpgradeNotify: vipUpgradeNotify,
 	}
 
 	return answ, nil

@@ -323,7 +323,9 @@ const sqlStoreTGID = `
 		    lang = EXCLUDED.lang
 	`
 
-func storeVIPTelegramID(ctx context.Context, tx pgx.Tx, id uuid.UUID, tgID int64, lang string) error {
+// StoreVIPTelegramID upserts the brigade_id <-> telegram_id link that
+// readmsgs relies on to deliver any VIP-related message to this brigade.
+func StoreVIPTelegramID(ctx context.Context, tx pgx.Tx, id uuid.UUID, tgID int64, lang string) error {
 	if _, err := tx.Exec(ctx, sqlStoreTGID, id, tgID, lang); err != nil {
 		return fmt.Errorf("store vip telegram id: %w", err)
 	}
@@ -355,11 +357,11 @@ func fetchVIPByTelegramID(ctx context.Context, tx pgx.Tx, telegram_id int64) (uu
 }
 
 const sqlFetchBID = `
-SELECT 
+SELECT
 	brigade_id
-FROM 
+FROM
 	head.brigadiers_ids
-WHERE 
+WHERE
 	brigade_id = $1
 LIMIT 1
 `
@@ -417,7 +419,7 @@ func RequestVIPBrigade(ctx context.Context, db *pgxpool.Pool,
 		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 
-	if err := storeVIPTelegramID(ctx, tx, id, tgID, lang); err != nil {
+	if err := StoreVIPTelegramID(ctx, tx, id, tgID, lang); err != nil {
 		return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
 	}
 
@@ -451,7 +453,7 @@ func RequestVIPBrigade2(ctx context.Context, db *pgxpool.Pool,
 	if checkID != uuid.Nil {
 		// the brigade already exists, so skip re-creating it, but still make sure
 		// the telegram link is recorded - this upsert is safe to repeat.
-		if err := storeVIPTelegramID(ctx, tx, brigadeID, tgID, lang); err != nil {
+		if err := StoreVIPTelegramID(ctx, tx, brigadeID, tgID, lang); err != nil {
 			return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
 		}
 
@@ -479,7 +481,7 @@ func RequestVIPBrigade2(ctx context.Context, db *pgxpool.Pool,
 		return uuid.Nil, fmt.Errorf("store brigadier label: %w", err)
 	}
 
-	if err := storeVIPTelegramID(ctx, tx, brigadeID, tgID, lang); err != nil {
+	if err := StoreVIPTelegramID(ctx, tx, brigadeID, tgID, lang); err != nil {
 		return uuid.Nil, fmt.Errorf("store vip telegram id: %w", err)
 	}
 

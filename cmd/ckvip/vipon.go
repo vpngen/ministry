@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	dcmgmt "github.com/vpngen/dc-mgmt"
 	"github.com/vpngen/ministry/internal/core"
@@ -16,24 +17,34 @@ import (
 )
 
 const sqlBrigadesToVIParize = `
-SELECT 
-	b.brigade_id
-FROM 
+SELECT
+	b.brigade_id,
+	vt.telegram_id,
+	vt.lang
+FROM
 	head.brigadiers b
-JOIN 
+JOIN
 	head.brigadier_vip bv ON b.brigade_id = bv.brigade_id
 LEFT JOIN
 	head.deleted_brigadiers d ON b.brigade_id = d.brigade_id
 LEFT JOIN
 	head.vip_messages vm ON b.brigade_id = vm.brigade_id AND vm.finalizer = false
-WHERE 
+LEFT JOIN
+	head.free_telegram_ids vt ON b.brigade_id = vt.brigade_id
+WHERE
 	d.brigade_id IS NULL
 	AND vm.brigade_id IS NULL
 	AND bv.vip_expire > (NOW() AT TIME ZONE 'UTC')
 	AND bv.finalizer = false
 `
 
-func getBrigadesToVIParize(ctx context.Context, db *pgxpool.Pool) ([]uuid.UUID, error) {
+type brigadeToVIParize struct {
+	BrigadeID  uuid.UUID
+	TelegramID int64
+	Lang       string
+}
+
+func getBrigadesToVIParize(ctx context.Context, db *pgxpool.Pool) ([]brigadeToVIParize, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
@@ -48,11 +59,20 @@ func getBrigadesToVIParize(ctx context.Context, db *pgxpool.Pool) ([]uuid.UUID, 
 
 	defer rows.Close()
 
-	var brigadeID uuid.UUID
-	brigades := make([]uuid.UUID, 0)
+	var (
+		brigadeID  uuid.UUID
+		telegramID pgtype.Int8
+		lang       pgtype.Text
+	)
 
-	if _, err := pgx.ForEachRow(rows, []any{&brigadeID}, func() error {
-		brigades = append(brigades, brigadeID)
+	brigades := make([]brigadeToVIParize, 0)
+
+	if _, err := pgx.ForEachRow(rows, []any{&brigadeID, &telegramID, &lang}, func() error {
+		brigades = append(brigades, brigadeToVIParize{
+			BrigadeID:  brigadeID,
+			TelegramID: telegramID.Int64,
+			Lang:       lang.String,
+		})
 
 		return nil
 	}); err != nil {
@@ -136,27 +156,42 @@ func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, 
 		fmt.Fprintf(os.Stderr, "%s: Found %d brigades to viparize\n", LogTag, len(brigades))
 	}
 
-	for _, brigadeID := range brigades {
-		fmt.Fprintf(os.Stderr, "%s: Set VIP for brigade: %s\n", LogTag, brigadeID)
+	for _, brigade := range brigades {
+		fmt.Fprintf(os.Stderr, "%s: Set VIP for brigade: %s\n", LogTag, brigade.BrigadeID)
 
-		_, addr, err := fetchBrigadeRealm(ctx, db, brigadeID)
+		_, addr, err := fetchBrigadeRealm(ctx, db, brigade.BrigadeID)
 		if err != nil {
 			return fmt.Errorf("fetch realm: %w", err)
 		}
 
-		if err := callRealmViparizeBrigadier(ctx, sshconf, LogTag, addr, true, brigadeID); err != nil {
+		if err := callRealmViparizeBrigadier(ctx, sshconf, LogTag, addr, true, brigade.BrigadeID); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: Can't call realm viparize brigadier: %s\n", LogTag, err)
 
 			continue
 		}
 
-		if err := setFinalizer(ctx, db, brigadeID); err != nil {
+		if err := setFinalizer(ctx, db, brigade.BrigadeID); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: Can't set finalizer: %s\n", LogTag, err)
 
 			continue
 		}
 
-		fmt.Fprintf(os.Stderr, "%s: Brigade %s VIP set\n", LogTag, brigadeID)
+		// This brigade already has a working config - there's nothing new to
+		// generate, just a short "your brigade is now VIP" notification to send.
+		if brigade.TelegramID != 0 {
+			lang := brigade.Lang
+			if lang == "" {
+				lang = "ru"
+			}
+
+			// readmsgs delivers off vip_telegram_ids regardless of which path
+			// discovered the telegram link, so make sure it's populated here too.
+			if err := linkAndNotifyVIPUpgrade(ctx, db, brigade.BrigadeID, brigade.TelegramID, lang); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: Can't queue VIP upgrade notification: %s\n", LogTag, err)
+			}
+		}
+
+		fmt.Fprintf(os.Stderr, "%s: Brigade %s VIP set\n", LogTag, brigade.BrigadeID)
 	}
 
 	return nil
@@ -241,6 +276,44 @@ func setFinalizer(ctx context.Context, db *pgxpool.Pool, brigadeID uuid.UUID) er
 
 	if _, err := tx.Exec(ctx, addSetVipAction, brigadeID, "begin", ""); err != nil {
 		return fmt.Errorf("exec action: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+const sqlStoreVIPUpgradeNotifyMessage = `
+INSERT INTO
+	head.vip_messages (brigade_id, finalizer, vip_upgrade_notify)
+VALUES
+	($1, true, true)
+ON CONFLICT (brigade_id) DO UPDATE
+	SET finalizer = true, vip_upgrade_notify = true
+`
+
+// linkAndNotifyVIPUpgrade links the telegram_id (discovered via
+// free_telegram_ids) into head.vip_telegram_ids and queues a plain "your
+// brigade is now VIP" notice in one transaction. Both must succeed together:
+// by this point setFinalizer has already flipped bv.finalizer to true, so a
+// partial failure here would drop the brigade out of getBrigadesToVIParize's
+// candidate set permanently, with no notification ever queued and no retry.
+func linkAndNotifyVIPUpgrade(ctx context.Context, db *pgxpool.Pool, brigadeID uuid.UUID, telegramID int64, lang string) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	if err := core.StoreVIPTelegramID(ctx, tx, brigadeID, telegramID, lang); err != nil {
+		return fmt.Errorf("link vip telegram id: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, sqlStoreVIPUpgradeNotifyMessage, brigadeID); err != nil {
+		return fmt.Errorf("store notify message: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

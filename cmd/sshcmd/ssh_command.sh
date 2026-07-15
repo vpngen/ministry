@@ -29,7 +29,7 @@ if [ "createbrigade" = "${cmd}" ]; then
 elif [ "restorebrigadier" = "${cmd}" ]; then
     "${basedir}"/restorebrigadier "$@"
 elif [ "checkbrigadier" = "${cmd}" ]; then
-    "${basedir}"/checkbrigadier "$@"
+    OBFS_UUID="${OBFS_UUID}" "${basedir}"/checkbrigadier "$@"
 elif [ "synclabels" = "${cmd}" ]; then
     "${basedir}"/synclabels "$@"
 elif [ "readmsgs" = "${cmd}" ]; then

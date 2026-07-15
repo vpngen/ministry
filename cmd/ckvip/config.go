@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	jwtsvc "github.com/vpngen/keydesk/pkg/jwt"
@@ -37,6 +39,36 @@ type config struct {
 
 	vipEndpoint string
 	obfsUUID    uuid.UUID
+
+	// mockTelegramIDs is the fixed set of stage test accounts that should
+	// always be treated as VIP-paid, regardless of environment. Configured
+	// via MOCK_TELEGRAM_IDS instead of hardcoded so prod can simply leave it
+	// unset - an empty set here means no telegram_id is ever a test account.
+	mockTelegramIDs map[int64]struct{}
+}
+
+func parseMockTelegramIDs(raw string) (map[int64]struct{}, error) {
+	ids := make(map[int64]struct{})
+
+	if raw == "" {
+		return ids, nil
+	}
+
+	for _, s := range strings.Split(raw, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+
+		id, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse telegram id %q: %w", s, err)
+		}
+
+		ids[id] = struct{}{}
+	}
+
+	return ids, nil
 }
 
 func parseArgs() (config, error) {
@@ -69,6 +101,13 @@ func parseArgs() (config, error) {
 	cfg.dbURL = dbURL
 
 	cfg.mock = os.Getenv("MOCK") == "true"
+
+	mockTelegramIDs, err := parseMockTelegramIDs(os.Getenv("MOCK_TELEGRAM_IDS"))
+	if err != nil {
+		return cfg, fmt.Errorf("parse mock telegram ids: %w", err)
+	}
+
+	cfg.mockTelegramIDs = mockTelegramIDs
 
 	if !cfg.mock {
 		sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)

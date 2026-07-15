@@ -146,7 +146,7 @@ func getDeletedBrigadesToVIParize(ctx context.Context, db *pgxpool.Pool) ([]xBri
 	return brigades, nil
 }
 
-func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, silent bool) error {
+func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, testTelegramIDs map[int64]struct{}, silent bool) error {
 	brigades, err := getBrigadesToVIParize(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get brigades to viparize: %w", err)
@@ -159,15 +159,17 @@ func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, 
 	for _, brigade := range brigades {
 		fmt.Fprintf(os.Stderr, "%s: Set VIP for brigade: %s\n", LogTag, brigade.BrigadeID)
 
-		_, addr, err := fetchBrigadeRealm(ctx, db, brigade.BrigadeID)
-		if err != nil {
-			return fmt.Errorf("fetch realm: %w", err)
-		}
+		if _, isTest := testTelegramIDs[brigade.TelegramID]; !isTest {
+			_, addr, err := fetchBrigadeRealm(ctx, db, brigade.BrigadeID)
+			if err != nil {
+				return fmt.Errorf("fetch realm: %w", err)
+			}
 
-		if err := callRealmViparizeBrigadier(ctx, sshconf, LogTag, addr, true, brigade.BrigadeID); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: Can't call realm viparize brigadier: %s\n", LogTag, err)
+			if err := callRealmViparizeBrigadier(ctx, sshconf, LogTag, addr, true, brigade.BrigadeID); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: Can't call realm viparize brigadier: %s\n", LogTag, err)
 
-			continue
+				continue
+			}
 		}
 
 		if err := setFinalizer(ctx, db, brigade.BrigadeID); err != nil {
@@ -215,11 +217,8 @@ func viparizeDeleted(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientC
 			err     error
 		)
 
-		if mock {
-			vpnconf, err = core.MockComposeBrigade(LogTag, brigade.BrigadeID)
-		} else {
-			vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, true, false, brigade.BrigadeID, brigade.Name, &brigade.Person)
-		}
+		vpnconf, err = core.ComposeBrigade(ctx, db, sshconf, LogTag, true, false, brigade.BrigadeID, brigade.Name, &brigade.Person)
+
 		if err != nil {
 			return fmt.Errorf("compose brigade: %w", err)
 		}

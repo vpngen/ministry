@@ -39,7 +39,7 @@ elif [ "readpush" = "${cmd}" ]; then
 elif [ "readpushvip" = "${cmd}" ]; then
     OBFS_UUID="${OBFS_UUID}" "${basedir}"/readpushvip "$@"
 elif [ "reqvipid" = "${cmd}" ]; then
-    OBFS_UUID="${OBFS_UUID}" "${basedir}"/reqvipid "$@"
+    OBFS_UUID="${OBFS_UUID}" MOCK="${MOCK}" "${basedir}"/reqvipid "$@"
 elif [ "reservebrigade" = "${cmd}" ]; then
     VIP_ENDPOINT="${VIP_ENDPOINT}" "${basedir}"/reservebrigade "$@"
 else

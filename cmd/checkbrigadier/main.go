@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/vpngen/ministry/internal/core"
@@ -51,7 +52,7 @@ func main() {
 		w = os.Stdout
 	}
 
-	sshKeyFilename, dbURL, _, err := readConfigs()
+	sshKeyFilename, dbURL, _, obfsUUID, err := readConfigs()
 	if err != nil {
 		fatal(w, jout, "Can't read configs: %s\n", err)
 	}
@@ -78,7 +79,12 @@ func main() {
 	// place); it's never used by the read-only -j lookup path, so -j always
 	// returns as soon as the brigade is identified, before any bless attempt.
 	if jout {
-		success(w, jout, brigadeID, del)
+		var outUUID uuid.UUID
+		for i := range 16 {
+			outUUID[i] = brigadeID[i] ^ obfsUUID[i]
+		}
+
+		success(w, jout, outUUID, del)
 
 		return
 	}
@@ -117,7 +123,7 @@ func main() {
 	log.Println(*vpnconf.Answer.Configs.WireguardConfig.FileContent)
 }
 
-func readConfigs() (string, string, string, error) {
+func readConfigs() (string, string, string, uuid.UUID, error) {
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
 		dbURL = defaultDatabaseURL
@@ -130,10 +136,18 @@ func readConfigs() (string, string, string, error) {
 
 	sshKeyFilename, err := sshVng.LookupForSSHKeyfile(os.Getenv("SSH_KEY"), sshkeyDefaultPath)
 	if err != nil {
-		return "", "", "", fmt.Errorf("lookup for ssh key: %w", err)
+		return "", "", "", uuid.Nil, fmt.Errorf("lookup for ssh key: %w", err)
 	}
 
-	return sshKeyFilename, dbURL, brigadesSchema, nil
+	obfsUUID, err := uuid.Parse(os.Getenv("OBFS_UUID"))
+	if err != nil {
+		return "", "", "", uuid.Nil, fmt.Errorf("parse obfs uuid: %w", err)
+	}
+
+	obfsUUID[6] &= 0x0F
+	obfsUUID[8] &= 0x3F
+
+	return sshKeyFilename, dbURL, brigadesSchema, obfsUUID, nil
 }
 
 func parseArgs() (string, string, bool, bool, bool, bool, error) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -244,4 +245,98 @@ func fetchPaidUsers(c *http.Client, obfsUUID uuid.UUID, ep string) (map[uuid.UUI
 	}
 
 	return brigades, payload, nil
+}
+
+// mergeTestBrigades folds the fixed set of stage test-account brigades into an
+// already-fetched paid-users map, extending (never shrinking) any existing
+// expiry - used so those accounts stay VIP regardless of what the real
+// payment API or MOCK=true fetch returned on their own.
+func mergeTestBrigades(brigades map[uuid.UUID]VipBrigade, testBrigades map[uuid.UUID]VipBrigade) {
+	for brigadeID, testBrigade := range testBrigades {
+		if brigade, ok := brigades[brigadeID]; ok {
+			if brigade.ExpiredAt.Before(testBrigade.ExpiredAt) {
+				brigade.ExpiredAt = testBrigade.ExpiredAt
+				brigades[brigadeID] = brigade
+			}
+
+			continue
+		}
+
+		brigades[brigadeID] = testBrigade
+	}
+}
+
+const sqlMockPaidUsers = `
+SELECT
+	brigade_id
+FROM
+	head.vip_telegram_ids
+WHERE telegram_id = ANY($1)
+`
+
+// getMockTestBrigadeIDs returns the brigade_ids linked to the configured set of
+// stage test Telegram accounts (MOCK_TELEGRAM_IDS), used both to build the
+// MOCK=true fetch and to keep those same accounts alive when fetchPaidUsers
+// hits the real API. An empty set returns no rows.
+func getMockTestBrigadeIDs(ctx context.Context, db *pgxpool.Pool, telegramIDs map[int64]struct{}) ([]uuid.UUID, error) {
+	if len(telegramIDs) == 0 {
+		return nil, nil
+	}
+
+	ids := make([]int64, 0, len(telegramIDs))
+	for id := range telegramIDs {
+		ids = append(ids, id)
+	}
+
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, sqlMockPaidUsers, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	defer rows.Close()
+
+	var brigadeID uuid.UUID
+
+	brigadeIDs := make([]uuid.UUID, 0)
+
+	if _, err := pgx.ForEachRow(rows, []any{&brigadeID}, func() error {
+		brigadeIDs = append(brigadeIDs, brigadeID)
+
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("foreach: %w", err)
+	}
+
+	return brigadeIDs, nil
+}
+
+// mockFetchPaidUsers stands in for fetchPaidUsers on stage (MOCK=true): instead of
+// calling the payment provider, it treats brigades linked to the configured set of
+// test Telegram accounts (MOCK_TELEGRAM_IDS) as a fresh month-long VIP purchase
+// with a single user.
+func mockFetchPaidUsers(ctx context.Context, db *pgxpool.Pool, telegramIDs map[int64]struct{}) (map[uuid.UUID]VipBrigade, []byte, error) {
+	testBrigadeIDs, err := getMockTestBrigadeIDs(ctx, db, telegramIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get mock test brigade ids: %w", err)
+	}
+
+	brigades := make(map[uuid.UUID]VipBrigade)
+
+	for _, brigadeID := range testBrigadeIDs {
+		brigades[brigadeID] = VipBrigade{
+			RawBrigadeID: brigadeID,
+			BrigadeID:    brigadeID,
+			ExpiredAt:    time.Now().AddDate(0, 1, 0),
+			UsersCount:   1,
+		}
+	}
+
+	return brigades, nil, nil
 }

@@ -42,6 +42,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: DB URL: %s\n", LogTag, cfg.dbURL)
 	}
 
+	db, err := pgsql.CreateDBPool(cfg.dbURL)
+	if err != nil {
+		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
+	}
+
 	brigades, raw, err := fetchPaidUsers(c, cfg.obfsUUID, cfg.vipEndpoint)
 	if cfg.debug && raw != nil {
 		fmt.Fprintf(os.Stdout, "%s\n", raw)
@@ -50,6 +55,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("%s: Can't fetch paid users: %s\n", LogTag, err)
 	}
+
+	testBrigades, _, err := mockFetchPaidUsers(ctx, db, cfg.mockTelegramIDs)
+	if err != nil {
+		log.Fatalf("%s: Can't fetch test brigades: %s\n", LogTag, err)
+	}
+
+	mergeTestBrigades(brigades, testBrigades)
 
 	if !cfg.silent {
 		fmt.Fprintf(os.Stderr, "%s: JWT token: %s\n", LogTag, c.Transport.(*BearerAuthTransport).Token())
@@ -82,35 +94,28 @@ func main() {
 		}
 	}
 
-	db, err := pgsql.CreateDBPool(cfg.dbURL)
-	if err != nil {
-		log.Fatalf("%s: Can't create db pool: %s\n", LogTag, err)
-	}
-
 	if len(brigades) > 0 {
 		if err := updateVIPRecords(ctx, db, brigades, cfg.silent); err != nil {
 			log.Fatalf("%s: Can't update VIP records: %s\n", LogTag, err)
 		}
 	}
 
-	if !cfg.mock {
-		// try to set vip brigade
-		if !cfg.silent {
-			fmt.Fprintf(os.Stderr, "%s: Try to set VIP brigades\n", LogTag)
-		}
+	// try to set vip brigade
+	if !cfg.silent {
+		fmt.Fprintf(os.Stderr, "%s: Try to set VIP brigades\n", LogTag)
+	}
 
-		if err := viparize(ctx, db, sshconf, cfg.silent); err != nil {
-			log.Fatalf("%s: Can't set VIP brigades: %s\n", LogTag, err)
-		}
+	if err := viparize(ctx, db, sshconf, cfg.mockTelegramIDs, cfg.silent); err != nil {
+		log.Fatalf("%s: Can't set VIP brigades: %s\n", LogTag, err)
+	}
 
-		// try to restore deleted vip brigade
-		if !cfg.silent {
-			fmt.Fprintf(os.Stderr, "%s: Try to restore deleted VIP brigades\n", LogTag)
-		}
+	// try to restore deleted vip brigade
+	if !cfg.silent {
+		fmt.Fprintf(os.Stderr, "%s: Try to restore deleted VIP brigades\n", LogTag)
+	}
 
-		if err := viparizeDeleted(ctx, db, sshconf, cfg.mock, cfg.debug, cfg.silent); err != nil {
-			log.Fatalf("%s: Can't restore deleted VIP brigades: %s\n", LogTag, err)
-		}
+	if err := viparizeDeleted(ctx, db, sshconf, cfg.mock, cfg.debug, cfg.silent); err != nil {
+		log.Fatalf("%s: Can't restore deleted VIP brigades: %s\n", LogTag, err)
 	}
 
 	// try to create credentials for VIP brigades

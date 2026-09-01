@@ -32,6 +32,12 @@ if [ -s "${VIP_BRIGADES_FILE_ETC}" ]; then
         VIP_BRIGADES_FILES="${VIP_BRIGADES_FILES} ${VIP_BRIGADES_FILE_ETC}"
 fi
 
+# Brigades created with one of these start labels (createbrigade -l, stored in
+# head.start_labels) are never auto-deleted - conference/campaign cohorts that
+# were promised protection, e.g. the Global Gathering lead-capture form.
+# Space-separated; override (or set empty to disable) via the environment.
+PROTECTED_LABELS=${PROTECTED_LABELS-"global-gathering"}
+
 bid="${1}"
 
 if [ -z "${bid}" ]; then
@@ -89,14 +95,43 @@ EOF
                 return 1
         fi
 
+        if [ -n "${PROTECTED_LABELS}" ]; then
+                result=$(psql -d "${DBNAME}" -q -t -A \
+                        --set ON_ERROR_STOP=yes \
+                        --set brigade_id="${brigade_id}" \
+                        --set labels="${PROTECTED_LABELS}" <<EOF
+        SELECT
+                sl.brigade_id
+        FROM
+                head.start_labels sl
+        WHERE
+                sl.brigade_id = :'brigade_id'
+                AND sl.label = ANY(string_to_array(:'labels', ' '))
+        LIMIT 1
+        ;
+EOF
+                )
+
+                rc=$?
+                if [ $rc -ne 0 ]; then
+                        echo "[-][is deleteable] Something wrong with db: $rc"
+                        return 1
+                fi
+
+                if [ -n "${result}" ]; then
+                        echo "[-]         Brigade ${brigade_id} has a protected label"
+                        return 1
+                fi
+        fi
+
         result=$(psql -d "${DBNAME}" -q -t -A \
                 --set ON_ERROR_STOP=yes \
                 --set brigade_id="${brigade_id}" <<EOF
-        SELECT 
+        SELECT
                 brigade_id
-        FROM 
+        FROM
                 head.deleted_brigadiers
-        WHERE 
+        WHERE
                 brigade_id = :'brigade_id'
         ;
 EOF

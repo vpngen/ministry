@@ -35,7 +35,7 @@ func main() {
 	}
 
 	// brigade_deleted is sourced from ministry DB directly, no SSH needed.
-	if err := queueDeletedBrigades(ctx, db, cfg.silent); err != nil {
+	if err := queueDeletedBrigades(ctx, db, cfg.protectedLabels, cfg.silent); err != nil {
 		log.Fatalf("%s: Can't queue deleted brigades: %s\n", LogTag, err)
 	}
 
@@ -128,7 +128,7 @@ func main() {
 	// One batch insert per event type. ON CONFLICT DO NOTHING ensures brigades that
 	// already have this notification queued or sent are silently skipped.
 	for _, s := range steps {
-		if err := queueNotifications(ctx, db, collected[s.eventType], s.eventType, cfg.silent); err != nil {
+		if err := queueNotifications(ctx, db, collected[s.eventType], s.eventType, cfg.protectedLabels, cfg.silent); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: queue %s: %s\n", LogTag, s.eventType, err)
 		}
 	}

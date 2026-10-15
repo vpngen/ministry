@@ -28,6 +28,27 @@ const fatalString = `{
 	"message" : "%s"
 }`
 
+const closedString = `{
+	"code" : 423,
+	"desc" : "Locked",
+	"status" : "error",
+	"message" : "%s"
+}`
+
+// closed answers that free brigade registration is temporarily closed.
+// Unlike fatal it returns normally: SSH clients then get this JSON answer
+// with its code instead of a bare non-zero exit status.
+func closed(w io.Writer, jout bool, msg string) {
+	switch jout {
+	case true:
+		fmt.Fprintf(w, closedString, msg)
+	default:
+		fmt.Fprint(w, msg)
+	}
+
+	log.Print(msg)
+}
+
 func fatal(w io.Writer, jout bool, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 

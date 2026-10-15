@@ -97,6 +97,16 @@ func main() {
 		fatal(w, jout, "%s: Access denied\n", LogTag)
 	}
 
+	// Temporary kill switch for free registrations: FREE_REGS_CLOSED=true in
+	// /etc/vgdept/ckvip.env (sourced by ssh_command.sh) refuses every
+	// createbrigade call with code 423. VIP brigades are created by ckvip and
+	// never pass through here, and restorebrigadier is untouched.
+	if os.Getenv("FREE_REGS_CLOSED") == "true" {
+		closed(w, jout, "free brigade registration is temporarily closed")
+
+		return
+	}
+
 	var (
 		mnemo     string
 		brigadeID uuid.UUID

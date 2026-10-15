@@ -81,7 +81,7 @@ func unviparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig
 	}
 
 	for _, brigadeID := range brigades {
-		fmt.Fprintf(os.Stderr, "%s: Set VIP for brigade: %s\n", LogTag, brigadeID)
+		fmt.Fprintf(os.Stderr, "%s: Unset VIP for brigade: %s\n", LogTag, brigadeID)
 
 		_, addr, err := fetchBrigadeRealm(ctx, db, brigadeID)
 		if err != nil {

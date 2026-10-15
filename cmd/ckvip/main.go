@@ -105,7 +105,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: Try to set VIP brigades\n", LogTag)
 	}
 
-	if err := viparize(ctx, db, sshconf, cfg.mockTelegramIDs, cfg.silent); err != nil {
+	if err := viparize(ctx, db, sshconf, cfg.mock, cfg.silent); err != nil {
 		log.Fatalf("%s: Can't set VIP brigades: %s\n", LogTag, err)
 	}
 

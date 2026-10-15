@@ -19,8 +19,8 @@ import (
 const sqlBrigadesToVIParize = `
 SELECT
 	b.brigade_id,
-	vt.telegram_id,
-	vt.lang
+	COALESCE(vt.telegram_id, ft.telegram_id),
+	COALESCE(NULLIF(vt.lang, ''), NULLIF(ft.lang, ''), 'ru')
 FROM
 	head.brigadiers b
 JOIN
@@ -30,7 +30,9 @@ LEFT JOIN
 LEFT JOIN
 	head.vip_messages vm ON b.brigade_id = vm.brigade_id AND vm.finalizer = false
 LEFT JOIN
-	head.free_telegram_ids vt ON b.brigade_id = vt.brigade_id
+	head.vip_telegram_ids vt ON b.brigade_id = vt.brigade_id
+LEFT JOIN
+	head.free_telegram_ids ft ON b.brigade_id = ft.brigade_id
 WHERE
 	d.brigade_id IS NULL
 	AND vm.brigade_id IS NULL
@@ -146,7 +148,7 @@ func getDeletedBrigadesToVIParize(ctx context.Context, db *pgxpool.Pool) ([]xBri
 	return brigades, nil
 }
 
-func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, testTelegramIDs map[int64]struct{}, silent bool) error {
+func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, mock bool, silent bool) error {
 	brigades, err := getBrigadesToVIParize(ctx, db)
 	if err != nil {
 		return fmt.Errorf("get brigades to viparize: %w", err)
@@ -159,7 +161,9 @@ func viparize(ctx context.Context, db *pgxpool.Pool, sshconf *ssh.ClientConfig, 
 	for _, brigade := range brigades {
 		fmt.Fprintf(os.Stderr, "%s: Set VIP for brigade: %s\n", LogTag, brigade.BrigadeID)
 
-		if _, isTest := testTelegramIDs[brigade.TelegramID]; !isTest {
+		// Comped brigades (MOCK_TELEGRAM_IDS) are activated exactly like paid
+		// ones - only MOCK mode, which has no realms to talk to, skips the SSH.
+		if !mock {
 			_, addr, err := fetchBrigadeRealm(ctx, db, brigade.BrigadeID)
 			if err != nil {
 				return fmt.Errorf("fetch realm: %w", err)

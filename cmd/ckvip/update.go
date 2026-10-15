@@ -312,10 +312,11 @@ func getMockTestBrigadeIDs(ctx context.Context, db *pgxpool.Pool, telegramIDs ma
 	return brigadeIDs, nil
 }
 
-// mockFetchPaidUsers stands in for fetchPaidUsers on stage (MOCK=true): instead of
-// calling the payment provider, it treats brigades linked to the configured set of
-// test Telegram accounts (MOCK_TELEGRAM_IDS) as a fresh month-long VIP purchase
-// with a single user.
+// mockFetchPaidUsers grants comped VIP: brigades linked to the configured Telegram
+// accounts (MOCK_TELEGRAM_IDS) are treated as a fresh month-long VIP purchase with a
+// single user, without going through the payment provider. Its result is merged into
+// the real fetchPaidUsers set in every environment, not just MOCK=true, so a comped
+// brigade is activated on its node exactly like a paying one - keep it that way.
 func mockFetchPaidUsers(ctx context.Context, db *pgxpool.Pool, telegramIDs map[int64]struct{}) (map[uuid.UUID]VipBrigade, []byte, error) {
 	testBrigadeIDs, err := getMockTestBrigadeIDs(ctx, db, telegramIDs)
 	if err != nil {

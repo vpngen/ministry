@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -99,12 +100,19 @@ func main() {
 
 	// Temporary kill switch for free registrations: FREE_REGS_CLOSED=true in
 	// /etc/vgdept/ckvip.env (sourced by ssh_command.sh) refuses every
-	// createbrigade call with code 423. VIP brigades are created by ckvip and
-	// never pass through here, and restorebrigadier is untouched.
+	// createbrigade call with code 423, except for the start labels listed in
+	// FREE_REGS_OPEN_LABELS (space-separated, e.g. "global-gathering": the
+	// conference form keeps issuing brigades while the bot and the Mini App
+	// button stay closed). VIP brigades are created by ckvip and never pass
+	// through here, and restorebrigadier is untouched.
 	if os.Getenv("FREE_REGS_CLOSED") == "true" {
-		closed(w, jout, "free brigade registration is temporarily closed")
+		if !labelOpenWhileClosed(label, os.Getenv("FREE_REGS_OPEN_LABELS")) {
+			closed(w, jout, "free brigade registration is temporarily closed")
 
-		return
+			return
+		}
+
+		log.Printf("%s: free registration closed, start label %q is allowed through\n", LogTag, label)
 	}
 
 	var (
@@ -290,4 +298,21 @@ func parseArgs() (*namesgenerator.Person, string, bool, bool, []byte, string, st
 	}
 
 	return person, fullname, *chunked, *jout, token, *label, id, int64(firstVisit), *mock, *tgid, *lang, nil
+}
+
+// labelOpenWhileClosed reports whether the start label is one of the
+// space-separated FREE_REGS_OPEN_LABELS that may still create brigades while
+// FREE_REGS_CLOSED=true. An empty label is never allowed.
+func labelOpenWhileClosed(label, allowed string) bool {
+	if label == "" {
+		return false
+	}
+
+	for _, l := range strings.Fields(allowed) {
+		if l == label {
+			return true
+		}
+	}
+
+	return false
 }

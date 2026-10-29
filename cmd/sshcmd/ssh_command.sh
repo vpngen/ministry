@@ -25,7 +25,7 @@ cmd=${1}; shift
 basedir=$(dirname "$0")
 
 if [ "createbrigade" = "${cmd}" ]; then
-    FREE_REGS_CLOSED="${FREE_REGS_CLOSED}" "${basedir}"/createbrigade "$@"
+    FREE_REGS_CLOSED="${FREE_REGS_CLOSED}" FREE_REGS_OPEN_LABELS="${FREE_REGS_OPEN_LABELS}" "${basedir}"/createbrigade "$@"
 elif [ "restorebrigadier" = "${cmd}" ]; then
     "${basedir}"/restorebrigadier "$@"
 elif [ "checkbrigadier" = "${cmd}" ]; then

@@ -5,6 +5,42 @@ definitions:
       error:
         type: string
     type: object
+  main.IdentifyRequest:
+    properties:
+      name:
+        type: string
+      words:
+        type: string
+    type: object
+  main.IdentifyResponse:
+    properties:
+      brigade_id:
+        type: string
+      key_count:
+        type: integer
+      session_token:
+        type: string
+      tier:
+        type: string
+    type: object
+  main.KeyInfo:
+    properties:
+      brigade_id:
+        type: string
+      deactivate_at:
+        type: string
+      pending_deactivation:
+        type: boolean
+      tier:
+        type: string
+    type: object
+  main.ListKeysResponse:
+    properties:
+      keys:
+        items:
+          $ref: '#/definitions/main.KeyInfo'
+        type: array
+    type: object
   main.ReserveRequest:
     properties:
       brigade_id:
@@ -17,12 +53,191 @@ definitions:
       ok:
         type: boolean
     type: object
+  main.UpgradeConfirmRequest:
+    properties:
+      to_tier:
+        type: string
+    type: object
+  main.UpgradeConfirmResponse:
+    properties:
+      socket_key_id:
+        type: string
+      tier:
+        type: string
+    type: object
+  main.UpgradeQuoteRequest:
+    properties:
+      to_tier:
+        type: string
+    type: object
+  main.UpgradeQuoteResponse:
+    properties:
+      next_invoice_date:
+        type: string
+      next_period_cost:
+        type: integer
+      prorated_cost:
+        type: integer
+      to_tier:
+        type: string
+    type: object
 info:
   contact: {}
   description: Ministry REST API — proxy layer over VIP server (vip.vpn.works).
   title: Ministry API
   version: "1.0"
 paths:
+  /identify:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: brigadier name + 6 mnemonic words
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.IdentifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.IdentifyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Identify an existing brigade by name + 6 words
+      tags:
+      - identify
+  /keys:
+    get:
+      description: Returns tier info for every brigade the authenticated Telegram
+        user owns.
+      parameters:
+      - description: tma <initData>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.ListKeysResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: List the caller's keys
+      tags:
+      - keytier
+  /keys/{brigade_id}/upgrade/confirm:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: brigade id
+        in: path
+        name: brigade_id
+        required: true
+        type: string
+      - description: tma <initData>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: target tier
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.UpgradeConfirmRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.UpgradeConfirmResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Confirm a key upgrade
+      tags:
+      - keytier
+  /keys/{brigade_id}/upgrade/quote:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: brigade id
+        in: path
+        name: brigade_id
+        required: true
+        type: string
+      - description: tma <initData>
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: target tier
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.UpgradeQuoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.UpgradeQuoteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Get an upgrade checkout quote
+      tags:
+      - keytier
   /reserve:
     post:
       consumes:

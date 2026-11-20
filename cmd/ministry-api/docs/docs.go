@@ -15,6 +15,234 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/identify": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "identify"
+                ],
+                "summary": "Identify an existing brigade by name + 6 words",
+                "parameters": [
+                    {
+                        "description": "brigadier name + 6 mnemonic words",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.IdentifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.IdentifyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/keys": {
+            "get": {
+                "description": "Returns tier info for every brigade the authenticated Telegram user owns.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "keytier"
+                ],
+                "summary": "List the caller's keys",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "tma \u003cinitData\u003e",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.ListKeysResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/keys/{brigade_id}/upgrade/confirm": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "keytier"
+                ],
+                "summary": "Confirm a key upgrade",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "brigade id",
+                        "name": "brigade_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "tma \u003cinitData\u003e",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "target tier",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.UpgradeConfirmRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.UpgradeConfirmResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/keys/{brigade_id}/upgrade/quote": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "keytier"
+                ],
+                "summary": "Get an upgrade checkout quote",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "brigade id",
+                        "name": "brigade_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "tma \u003cinitData\u003e",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "target tier",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.UpgradeQuoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/main.UpgradeQuoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/reserve": {
             "post": {
                 "description": "Marks a brigade as paid on the VIP server. The brigade must already\nexist in the ministry DB (created via SSH reqvipid).",
@@ -90,6 +318,62 @@ const docTemplate = `{
                 }
             }
         },
+        "main.IdentifyRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "words": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.IdentifyResponse": {
+            "type": "object",
+            "properties": {
+                "brigade_id": {
+                    "type": "string"
+                },
+                "key_count": {
+                    "type": "integer"
+                },
+                "session_token": {
+                    "type": "string"
+                },
+                "tier": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.KeyInfo": {
+            "type": "object",
+            "properties": {
+                "brigade_id": {
+                    "type": "string"
+                },
+                "deactivate_at": {
+                    "type": "string"
+                },
+                "pending_deactivation": {
+                    "type": "boolean"
+                },
+                "tier": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.ListKeysResponse": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.KeyInfo"
+                    }
+                }
+            }
+        },
         "main.ReserveRequest": {
             "type": "object",
             "properties": {
@@ -106,6 +390,50 @@ const docTemplate = `{
             "properties": {
                 "ok": {
                     "type": "boolean"
+                }
+            }
+        },
+        "main.UpgradeConfirmRequest": {
+            "type": "object",
+            "properties": {
+                "to_tier": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.UpgradeConfirmResponse": {
+            "type": "object",
+            "properties": {
+                "socket_key_id": {
+                    "type": "string"
+                },
+                "tier": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.UpgradeQuoteRequest": {
+            "type": "object",
+            "properties": {
+                "to_tier": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.UpgradeQuoteResponse": {
+            "type": "object",
+            "properties": {
+                "next_invoice_date": {
+                    "type": "string"
+                },
+                "next_period_cost": {
+                    "type": "integer"
+                },
+                "prorated_cost": {
+                    "type": "integer"
+                },
+                "to_tier": {
+                    "type": "string"
                 }
             }
         }

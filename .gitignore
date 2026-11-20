@@ -10,4 +10,5 @@ pkg/
 DOCUMENTATION.md
 ENVIRONMENT.md
 .DS_Store
-.claude/
+.claude//.env
+/keydesk-jwt.key.pub

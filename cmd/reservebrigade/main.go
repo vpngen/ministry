@@ -225,7 +225,7 @@ func parseArgs() ([]byte, uuid.UUID, string, bool, bool, config, error) {
 			Issuer:        "ministry",
 			Subject:       reserveSubject,
 			Audience:      []string{"ministry", "socket"},
-			SigningMethod:  signingMethod,
+			SigningMethod: signingMethod,
 			VipURL:        vipEndpoint,
 		}
 
